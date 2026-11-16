@@ -52,6 +52,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.BoundingBox;
 
 /**
  * Eine Runde Wolkenkampf auf einer Karte: erst warten alle in ihrer Ballon-Gondel, dann klappt der Boden auf, man
@@ -71,6 +72,13 @@ public final class Game {
 
     public static final String FIREWORK_TAG = "wolkenkampf_feuerwerk";
     private static final int SECOND = 20;
+    /** Die letzten Sekunden in der Gondel werden groß heruntergezählt. */
+    private static final int COUNTDOWN = 5;
+    /**
+     * So viele Ticks nach dem Aufklappen fällt der Gondelboden ganz weg. Die offenen Klappen sieht und hört man kurz –
+     * blieben sie stehen, könnte man auf ihren Kanten stehen bleiben (eine offene Falltür ist eine Wand am Blockrand).
+     */
+    private static final int FLOOR_DROP = 3;
     private static final int RISE_DELAY = 40;
     private static final int RISE_EVERY = 3;
     private static final int RISE_STEPS = 16;
@@ -126,6 +134,7 @@ public final class Game {
     private int strikeCount;
     private double strikeTimer;
     private double fogLevel;
+    private int floorDrop;
     private int riseStep = -1;
     private int riseTicks;
     private Team winner;
@@ -487,12 +496,12 @@ public final class Game {
         }
         if (phaseTicks % SECOND == 0) {
             int secs = phaseTicks / SECOND;
-            if (secs > 0 && secs <= 5) {
+            if (secs > 0 && secs <= COUNTDOWN) {
                 for (Player p : audience()) {
                     String lang = plugin.lang(p);
                     Ui.title(p, Texts.text(lang, "game.count", Placeholder.unparsed("n", String.valueOf(secs))),
                             Texts.text(lang, "game.gondola.sub"), 900);
-                    Ui.sound(p, "minecraft:block.note_block.hat", 1.0f + (5 - secs) * 0.1f);
+                    Ui.sound(p, "minecraft:block.note_block.hat", 1.0f + (COUNTDOWN - secs) * 0.1f);
                 }
             }
             updateBar();
@@ -503,13 +512,30 @@ public final class Game {
         }
     }
 
-    /** Die Gondeln öffnen sich: Boden klappt auf, alle schweben auf ihre Insel. */
+    /**
+     * Die Gondeln öffnen sich: Boden klappt auf, alle schweben auf ihre Insel. Kurz darauf fällt der aufgeklappte Boden
+     * ganz weg ({@link #dropFloors()}), damit niemand auf den Kanten der offenen Klappen stehen bleibt.
+     */
     private void open() {
         phase = Phase.FIGHT;
         seconds = 0;
+        // Wer sich an den Rand der Gondel lehnt, stünde sonst halb auf dem Holzrahmen und bliebe oben: über die Öffnung.
+        for (Team t : teams) {
+            MapLayout.Island is = layout.starts().get(t.island());
+            for (int m = 0; m < t.members().size(); m++) {
+                Player p = Bukkit.getPlayer(t.members().get(m));
+                Fighter f = fighters.get(t.members().get(m));
+                if (p != null && f != null && f.alive() && !overOpening(p, is)) {
+                    Location spot = gondolaSpot(t, m);
+                    spot.setYaw(p.getLocation().getYaw());
+                    spot.setPitch(p.getLocation().getPitch());
+                    p.teleport(spot);
+                }
+            }
+        }
         for (MapLayout.Island is : layout.starts()) {
             for (int[] f : Gondola.floor()) {
-                Block b = world.getBlockAt(map.originX() + is.x() + f[0], MapType.FLOOR_Y + is.gondolaY(), map.originZ() + is.z() + f[2]);
+                Block b = floorBlock(is, f);
                 if (b.getBlockData() instanceof TrapDoor td) {
                     td.setOpen(true);
                     b.setBlockData(td, false);
@@ -517,6 +543,7 @@ public final class Game {
             }
             world.playSound(loc(is.x() + 0.5, is.gondolaY() + 1, is.z() + 0.5), "minecraft:block.wooden_trapdoor.open", 1.5f, 0.8f);
         }
+        floorDrop = FLOOR_DROP;
         for (Fighter f : fighters.values()) {
             Player p = Bukkit.getPlayer(f.uuid());
             if (p == null || !f.alive()) {
@@ -525,7 +552,7 @@ public final class Game {
             String lang = plugin.lang(p);
             p.setGameMode(GameMode.SURVIVAL);
             p.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, SLOW_FALL_TICKS, 0, false, false, true));
-            f.landing(true);
+            f.startLanding(MapType.FLOOR_Y + layout.starts().get(team(f).island()).gondolaY());
             StartKit kit = kitOf(p);
             for (ItemStack item : LootItems.kit(kit, map)) {
                 p.getInventory().addItem(item);
@@ -539,12 +566,48 @@ public final class Game {
         plugin.stateChanged();
     }
 
+    private Block floorBlock(MapLayout.Island is, int[] f) {
+        return world.getBlockAt(map.originX() + is.x() + f[0], MapType.FLOOR_Y + is.gondolaY(), map.originZ() + is.z() + f[2]);
+    }
+
+    /** Steht die Person ganz über dem Gondelboden (3 × 3) und nicht teilweise auf dem Holzrahmen drumherum? */
+    private boolean overOpening(Player p, MapLayout.Island is) {
+        int inner = Gondola.HALF - 1;
+        double x1 = map.originX() + is.x() - inner;
+        double z1 = map.originZ() + is.z() - inner;
+        double size = 2 * inner + 1;
+        BoundingBox box = p.getBoundingBox();
+        return box.getMinX() >= x1 && box.getMaxX() <= x1 + size && box.getMinZ() >= z1 && box.getMaxZ() <= z1 + size;
+    }
+
+    /**
+     * Der aufgeklappte Boden fällt weg (Holzsplitter, Krachen). Eine offene Falltür ist eine dünne Wand am Rand ihres
+     * Blocks, oben bündig mit dem Boden – wer darüber ragte, bliebe sonst oben stehen und stiege mit dem Ballon auf.
+     */
+    private void dropFloors() {
+        BlockData splinters = Plan.data(Gondola.trapdoor(true));
+        for (MapLayout.Island is : layout.starts()) {
+            for (int[] f : Gondola.floor()) {
+                Block b = floorBlock(is, f);
+                if (b.getBlockData() instanceof TrapDoor) {
+                    b.setType(Material.AIR, false);
+                }
+            }
+            Location mid = loc(is.x() + 0.5, is.gondolaY() + 0.5, is.z() + 0.5);
+            world.spawnParticle(Particle.BLOCK, mid, 30, 0.9, 0.2, 0.9, 0, splinters);
+            world.playSound(mid, "minecraft:block.wood.break", 1.2f, 0.9f);
+        }
+    }
+
     private StartKit kitOf(Player p) {
         StartKit k = StartKit.byId(plugin.data(p).kit());
         return k == null ? StartKit.WANDERER : k;
     }
 
     private void tickFight() {
+        if (floorDrop > 0 && --floorDrop == 0) {
+            dropFloors();
+        }
         tickRise();
         for (Fighter f : new ArrayList<>(fighters.values())) {
             if (!f.alive()) {
@@ -558,7 +621,7 @@ public final class Game {
                 eliminate(p, f, Cause.VOID, null, false);
                 continue;
             }
-            f.landingTick(p.isOnGround());
+            f.landingTick(p.isOnGround(), p.getLocation().getY());
         }
         if (phase != Phase.FIGHT) {
             return;
@@ -870,6 +933,13 @@ public final class Game {
         seconds = Math.max(0, second);
     }
 
+    /** Verwaltung, Tests: in der Gondel gleich den Countdown der letzten fünf Sekunden starten, danach öffnet sie sich. */
+    public void countdown() {
+        if (phase == Phase.GONDOLA) {
+            phaseTicks = Math.min(phaseTicks, COUNTDOWN * SECOND + 1);
+        }
+    }
+
     // ---------- Ballons steigen auf ----------
 
     private void tickRise() {
@@ -881,6 +951,12 @@ public final class Game {
             return;
         }
         riseTicks = RISE_EVERY;
+        if (riseStep < 0) {
+            // Der Ballon macht sich los (der Boden ist längst weggefallen); ab dem nächsten Schritt steigt er.
+            soundAll("minecraft:entity.breeze.wind_burst", 0.7f);
+            riseStep++;
+            return;
+        }
         for (int i = 0; i < layout.starts().size(); i++) {
             MapLayout.Island is = layout.starts().get(i);
             List<Object[]> blocks = gondolaBlocks(IslandColour.of(i));
@@ -890,7 +966,7 @@ public final class Game {
             // Alte Stelle räumen (nur, was noch zur Gondel gehört), neue Stelle eine Höhe darüber.
             for (Object[] b : blocks) {
                 int[] o = (int[]) b[0];
-                Block at = world.getBlockAt(bx + o[0], by + o[1] + Math.max(0, riseStep), bz + o[2]);
+                Block at = world.getBlockAt(bx + o[0], by + o[1] + riseStep, bz + o[2]);
                 if (at.getType() == ((BlockData) b[1]).getMaterial()) {
                     at.setType(Material.AIR, false);
                 }
@@ -907,16 +983,22 @@ public final class Game {
                 world.spawnParticle(Particle.CLOUD, bx + 0.5, by + riseStep + 10, bz + 0.5, 40, 3, 4, 3, 0.02);
             }
         }
-        if (riseStep == -1) {
-            soundAll("minecraft:entity.breeze.wind_burst", 0.7f);
-        }
         riseStep++;
     }
 
+    /**
+     * Die aufsteigende Gondel ohne ihren Boden: der ist beim Öffnen weggefallen ({@link #dropFloors()}) und kommt erst
+     * mit der Wiederherstellung nach der Runde zurück – sonst finge er jemanden, der noch auf Bodenhöhe ist, wieder auf
+     * und höbe ihn mit dem Ballon hoch.
+     */
     private static synchronized List<Object[]> gondolaBlocks(IslandColour c) {
         return GONDOLA_BLOCKS.computeIfAbsent(c, k -> {
             List<Object[]> out = new ArrayList<>();
-            Gondola.plan(k).forEachAt((x, y, z, d) -> out.add(new Object[] {new int[] {x, y, z}, d}));
+            Gondola.plan(k).forEachAt((x, y, z, d) -> {
+                if (!Gondola.isFloor(x, y, z)) {
+                    out.add(new Object[] {new int[] {x, y, z}, d});
+                }
+            });
             return out;
         });
     }

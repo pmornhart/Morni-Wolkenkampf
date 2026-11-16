@@ -7,8 +7,14 @@
  * mitschreibt.
  *
  * Runde 1: allein auf der Wolkenalm – Gondel, Landung, Truhen, Brücke, Kampf, Hinunterstoßen, Nachschub, Gewitter,
- * Nebel, Sieg, Statistik, Karte wieder frisch. Runde 2: zu zweit auf dem Kristallgipfel – Party im selben Team, kein
- * Schaden unter Teamkameraden, Zuschauen, Sieg zu zweit.
+ * Nebel, Sieg, Statistik, Karte wieder frisch. Runde 2: zu zweit auf dem Kristallgipfel – Party im selben Team, beide
+ * fallen sofort durch den Boden, kein Schaden unter Teamkameraden, Zuschauen, Sieg zu zweit.
+ *
+ * Die Gondel öffnet sich erst, wenn der Test es sagt (gondel-sekunden in test/run.sh ist lang, der Test schickt
+ * „/wolkenkampf vorspulen countdown|oeffnen“): auf einem ausgelasteten Rechner kommen Befehle über RCON erst Sekunden
+ * später an – mit einer festen Gondel-Zeit liefen die Prüfungen dann schon nach dem Öffnen.
+ *   LANGSAM=<sekunden>   die Test-Spieler warten nach jedem Rundenstart so lange, bevor sie die Gondel prüfen
+ *                        (stellt einen ausgelasteten Rechner nach)
  *
  * Verfasst mit Claude 🤖
  */
@@ -22,6 +28,7 @@ const { rcon } = require('./rcon.cjs');
 const [HOST = '127.0.0.1', PORT = '25810', RCON = '127.0.0.1:25910', PASS_FILE, SERVER] = process.argv.slice(2);
 const PASS = fs.readFileSync(PASS_FILE, 'utf8').trim();
 const VERSION = process.env.MC_VERSION ?? '26.1';
+const SLOW_MS = Number(process.env.LANGSAM ?? 0) * 1000;
 const HALL = { x: 0.5, y: 101, z: 11.5 };
 const FLOOR = 100;
 
@@ -182,6 +189,59 @@ function invHas(bot, name) {
   return bot.inventory.items().some((i) => i.name === name);
 }
 
+/** Sind alle neun Stellen eines Gondelbodens {block}? t = Team aus status() ({x, z, gy}). */
+async function floorIs(t, block) {
+  const checks = [];
+  for (const dx of [-1, 0, 1]) {
+    for (const dz of [-1, 0, 1]) checks.push(inWorld(`execute if block ${t.x + dx} ${t.gy} ${t.z + dz} ${block}`));
+  }
+  return (await cmd(...checks)).every((r) => /passed/i.test(r));
+}
+const floorClosed = (t) => floorIs(t, 'spruce_trapdoor[open=false]');
+/** Nach dem Öffnen fällt der Boden weg und kommt erst mit der Wiederherstellung zurück – darum auch spät noch prüfbar. */
+const floorGone = (t) => floorIs(t, 'air');
+
+/** Höhe der Füße / Höhe des Gondelbodens je Spieler (man steht in der Gondel auf gy + 1). */
+const heights = (bots, teamOf) => bots.map((b) => `${b.username}:${b.entity.position.y.toFixed(2)}/${teamOf(b.username).gy}`).join(' ');
+
+/**
+ * Fallen alle gleich durch den Boden? Vor dem Öffnen starten und nicht abwarten. Bezugspunkt ist der Ballon: gut zwei
+ * Sekunden (45 Ticks) nach dem Öffnen steigt er auf – {watcher} sieht dann den Holzrand seiner Gondel verschwinden. In
+ * diesem Augenblick wird festgehalten, wie tief jeder unter seinem Gondelboden ist ({tiefe}); danach wird gewartet, bis
+ * alle auf ihrer Insel gelandet sind ({gelandet}: ms seit dem Start). Mit Langsamem Fallen ist man nach 10 Ticks einen
+ * halben Block tief, nach 40 Ticks etwa sechs. Wer auf einer Kante der Gondel stehen bleibt, ist dann noch ganz oben
+ * (Tiefe 0; alter Stand: zu zweit standen sogar alle vier auf Kanten und fielen erst Sekunden nach dem Aufsteigen).
+ * Bezugspunkt und Fall kommen beide vom Server – läuft er langsamer, fallen die Test-Spieler bis dahin sogar tiefer.
+ */
+async function fallTogether(bots, teamOf, watcher, timeoutMs) {
+  const start = Date.now();
+  const depth = (b) => teamOf(b.username).gy + 1 - b.entity.position.y;
+  const t = teamOf(watcher.username);
+  const rim = new Vec3(t.x + 2, t.gy, t.z);
+  let rimSeen = false;
+  let tiefe = null;
+  const gelandet = {};
+  while (Date.now() - start < timeoutMs && (tiefe === null || Object.keys(gelandet).length < bots.length)) {
+    const block = watcher.blockAt(rim)?.name;
+    if (block === 'stripped_spruce_wood') {
+      rimSeen = true;
+    } else if (rimSeen && tiefe === null && block === 'air') {
+      tiefe = Object.fromEntries(bots.map((b) => [b.username, Number(depth(b).toFixed(2))]));
+    }
+    for (const b of bots) {
+      if (gelandet[b.username] === undefined && b.entity.onGround &&
+        Math.abs(b.entity.position.y - (teamOf(b.username).top + 1)) < 1.6) {
+        gelandet[b.username] = Date.now() - start;
+      }
+    }
+    await sleep(25);
+  }
+  return { tiefe, gelandet };
+}
+/** Als der Ballon aufstieg, war jeder schon unter seinem Gondelboden (mindestens einen halben Block) – und alle sind gelandet. */
+const fellTogether = (f, bots) => f.tiefe !== null && Object.values(f.tiefe).every((d) => d >= 0.5) &&
+  Object.keys(f.gelandet).length === bots.length;
+
 async function attackUntil(attacker, victim, done, tries = 10) {
   for (let i = 0; i < tries; i++) {
     const target = attacker.players[victim.username]?.entity;
@@ -271,40 +331,47 @@ async function main() {
   check('Runde in der Gondel: 4 Teams, 4 verschiedene Inseln', s?.phase === 'GONDOLA' && s.teams.length === 4 &&
     new Set(s.teams.map((t) => t.island)).size === 4, JSON.stringify(s?.teams));
   const team = (name) => s.teams[s.players[name].team];
-  await sleep(1000);
+  await sleep(1000 + SLOW_MS);
   const annaT = team('Anna');
-  check('Alle stehen in ihrer Gondel über der eigenen Insel', ['Anna', 'Bert', 'Carl', 'Dora'].every((n) => {
-    const b = { Anna: anna, Bert: bert, Carl: carl, Dora: dora }[n];
-    const t = team(n);
+  const four = [anna, bert, carl, dora];
+  check('Alle stehen in ihrer Gondel über der eigenen Insel', await waitFor(() => four.every((b) => {
+    const t = team(b.username);
     return Math.hypot(b.entity.position.x - (t.x + 0.5), b.entity.position.z - (t.z + 0.5)) < 1.8 &&
       Math.abs(b.entity.position.y - (t.gy + 1)) < 1.2;
-  }), JSON.stringify(anna.entity.position) + ' / ' + JSON.stringify(annaT));
+  }), 5000), JSON.stringify(anna.entity.position) + ' / ' + JSON.stringify(annaT));
   check('Abenteuermodus in der Gondel, Titel und Inselfarbe', anna.game.gameMode === 'adventure' &&
     sawTitle(anna, /Wolkenkampf/) && sees(anna, /Deine Insel: /) && sees(bert, /Your island: /),
     anna.chats.slice(-2).join(' | '));
-  const gondolaFloor = await passed(`execute if block ${annaT.x} ${annaT.gy} ${annaT.z} spruce_trapdoor[open=false]`);
-  check('Gondelboden aus geschlossenen Falltüren', gondolaFloor);
+  // Gleich nach dem Start kann der Abschnitt der Gondel kurz nachladen („That position is not loaded“) – darum warten.
+  check('Gondelboden aus geschlossenen Falltüren (alle neun)', await waitFor(() => floorClosed(annaT), 6000, 300));
   anna.setControlState('forward', true);
   anna.setControlState('jump', true);
   await sleep(1500);
   anna.setControlState('forward', false);
   anna.setControlState('jump', false);
   await sleep(300);
+  // Im Korb (Zaun ringsum, 2 Blöcke von der Mitte): in den Ecken ist man bis 2,2 von der Mitte weg.
   check('Die Gondel hält fest (niemand springt vorher hinaus)',
-    Math.hypot(anna.entity.position.x - (annaT.x + 0.5), anna.entity.position.z - (annaT.z + 0.5)) < 1.9 &&
+    Math.max(Math.abs(anna.entity.position.x - (annaT.x + 0.5)), Math.abs(anna.entity.position.z - (annaT.z + 0.5))) < 2.2 &&
       anna.entity.position.y > annaT.gy, JSON.stringify(anna.entity.position));
-  check('Countdown im Titel', await waitFor(() => sawTitle(anna, /^[1-5]$/), 6000), anna.titles.join(' | '));
+  s = (await status()).wolkenalm;
+  check('Die Gondel wartet, bis der Test sie öffnet', s.phase === 'GONDOLA' && !sawTitle(anna, /^[1-5]$/),
+    `phase=${s.phase} ${anna.titles.join(' | ')}`);
+  await cmd('wolkenkampf vorspulen countdown wolkenalm');
+  const falling1 = fallTogether(four, team, anna, 30000);
+  check('Countdown im Titel (5 … 1)', await waitFor(() => ['5', '4', '3', '2', '1'].every((n) => anna.titles.includes(n)), 15000),
+    anna.titles.join(' | '));
 
   // ------------------------------------------------------------------ Öffnen + Landen
-  check("Gondel öffnet sich: „Los geht's!“", await waitFor(() => sawTitle(anna, /Los geht's/) && sawTitle(bert, /Let's go/), 8000),
+  check("Gondel öffnet sich: „Los geht's!“", await waitFor(() => sawTitle(anna, /Los geht's/) && sawTitle(bert, /Let's go/), 10000),
     anna.titles.slice(-2).join(' | '));
   s = (await status()).wolkenalm;
   check('Phase Kampf, Überlebensmodus', s.phase === 'FIGHT' && await waitFor(() => anna.game.gameMode === 'survival', 2000));
-  const landed = await waitFor(() => [anna, bert, carl, dora].every((b) => b.entity.onGround &&
-    Math.abs(b.entity.position.y - (team(b.username).top + 1)) < 1.6), 12000, 200);
-  check('Alle sind auf ihrer Insel gelandet', landed, [anna, bert, carl, dora].map((b) =>
-    `${b.username}:${b.entity.position.y.toFixed(1)}/${team(b.username).top + 1}`).join(' '));
-  check('Kein Fallschaden bei der Landung', anna.health === 20 && bert.health === 20, `${anna.health} ${bert.health}`);
+  check('Der Gondelboden fällt nach dem Aufklappen weg (alle neun Klappen)', await waitFor(() => floorGone(annaT), 1500, 200));
+  const fell1 = await falling1;
+  check('Der Boden fällt weg: alle sind unten, bevor der Ballon aufsteigt, und landen auf ihrer Insel', fellTogether(fell1, four),
+    `${JSON.stringify(fell1)} ${heights(four, team)}`);
+  check('Kein Fallschaden bei der Landung', four.every((b) => b.health === 20), four.map((b) => `${b.username}:${b.health}`).join(' '));
   check('Start-Ausrüstung: Baumeister (Bretter + Spitzhacke), Jäger (Bogen + Pfeile)',
     invHas(anna, 'spruce_planks') && invHas(anna, 'stone_pickaxe') && invHas(bert, 'bow') && invHas(bert, 'arrow') &&
       carl.inventory.items().length === 0, `Anna ${anna.inventory.items().map((i) => `${i.name}×${i.count}`)} / Bert ${bert.inventory.items().map((i) => i.name)}`);
@@ -446,7 +513,9 @@ async function main() {
   check('Der Nebel erwischt Carl', await waitFor(() => sees(anna, /Carl hat sich im Nebel verirrt|Carl ist im Nebel untergegangen/), 30000),
     anna.chats.slice(-2).join(' | '));
   check('Anna gewinnt: „Gewonnen!“', await waitFor(() => sawTitle(anna, /Gewonnen/), 4000), anna.titles.join(' | '));
-  check('Alle anderen sehen den Sieger (englisch: „Anna wins“)', sawTitle(bert, /Anna wins/) && sawTitle(carl, /Anna gewinnt/));
+  // Die Titel kommen im selben Tick bei allen an, die Test-Spieler lesen sie aber nacheinander – kurz warten.
+  check('Alle anderen sehen den Sieger (englisch: „Anna wins“)', await waitFor(() => sawTitle(bert, /Anna wins/) &&
+    sawTitle(carl, /Anna gewinnt/), 3000), `Bert: ${bert.titles.join(' | ')} / Carl: ${carl.titles.join(' | ')}`);
   check('Sieg im Chat und eigene Runde', sees(anna, /Sieg für Anna/) && sees(anna, /Platz 1 · 1 Kills · 2 Truhen/) &&
     sees(bert, /Victory for Anna/), anna.chats.slice(-3).join(' | '));
   const stats = calls().filter((c) => c.t === 'stats');
@@ -497,14 +566,24 @@ async function main() {
   check('Zwei Zweier-Teams', s?.teams.length === 2, JSON.stringify(s?.teams));
   check('Party Anna + Carl im selben Team, Bert + Dora im anderen', s.players.Anna.team === s.players.Carl.team &&
     s.players.Bert.team === s.players.Dora.team && s.players.Anna.team !== s.players.Bert.team, JSON.stringify(s.players));
-  await sleep(800);
+  await sleep(800 + SLOW_MS);
   const at2 = s.teams[s.players.Anna.team];
-  check('Anna und Carl stehen zusammen in einer Gondel', [anna, carl].every((b) =>
+  check('Anna und Carl stehen zusammen in einer Gondel', await waitFor(() => [anna, carl].every((b) =>
     Math.hypot(b.entity.position.x - (at2.x + 0.5), b.entity.position.z - (at2.z + 0.5)) < 1.8 &&
-      Math.abs(b.entity.position.y - (at2.gy + 1)) < 1.2), `${JSON.stringify(anna.entity.position)} ${JSON.stringify(carl.entity.position)}`);
+      Math.abs(b.entity.position.y - (at2.gy + 1)) < 1.2), 5000), `${JSON.stringify(anna.entity.position)} ${JSON.stringify(carl.entity.position)}`);
   check('„Du kämpfst zusammen mit …“ (de/en)', sees(anna, /Du kämpfst zusammen mit Carl/) && sees(bert, /You're fighting together with Dora/));
+  check('Zu zweit: beide Gondelböden geschlossen', await waitFor(async () => (await floorClosed(at2)) &&
+    (await floorClosed(s.teams[s.players.Bert.team])), 6000, 300));
+  const falling2 = fallTogether(four, team, anna, 30000);
+  await cmd('wolkenkampf vorspulen oeffnen kristallgipfel');
   check('Gondel öffnet sich', await waitFor(async () => (await status()).kristallgipfel.phase === 'FIGHT', 10000));
-  await waitFor(() => anna.entity.onGround && carl.entity.onGround, 10000);
+  check('Zu zweit: beide Gondelböden fallen weg', await waitFor(async () => (await floorGone(at2)) &&
+    (await floorGone(s.teams[s.players.Bert.team])), 1500, 200));
+  // Zu zweit steht man neben der Mitte – früher blieb fast immer einer auf der Kante einer offenen Falltür stehen.
+  const fell2 = await falling2;
+  check('Zu zweit sind alle unten, bevor der Ballon aufsteigt (niemand bleibt auf einer Kante stehen)', fellTogether(fell2, four),
+    `${JSON.stringify(fell2)} ${heights(four, team)}`);
+  check('Zu zweit verliert niemand Leben', four.every((b) => b.health === 20), four.map((b) => `${b.username}:${b.health}`).join(' '));
   await sleep(500);
   await tp(carl, at2.x + 1.5, at2.top + 1, at2.z + 0.5, 90, 0);
   await tp(anna, at2.x - 0.5, at2.top + 1, at2.z + 0.5, -90, 0);
@@ -534,8 +613,8 @@ async function main() {
   await cmd(inWorld(`tp Dora ${bt2.x + 0.5} 40 ${bt2.z + 0.5}`));
   check('Team Anna + Carl gewinnt (beide „Gewonnen!“)', await waitFor(() => sawTitle(anna, /Gewonnen/) && sawTitle(carl, /Gewonnen/), 6000),
     anna.titles.slice(-2).join(' | '));
-  check('Englisch: „Anna & Carl wins“', sawTitle(bert, /Anna & Carl wins/) || sawTitle(dora, /Anna & Carl gewinnt/),
-    bert.titles.slice(-2).join(' | '));
+  check('Englisch: „Anna & Carl wins“', await waitFor(() => sawTitle(bert, /Anna & Carl wins/) || sawTitle(dora, /Anna & Carl gewinnt/),
+    3000), bert.titles.slice(-2).join(' | '));
   const stats2 = calls().filter((c) => c.t === 'stats');
   const carlWins = stats2.filter((c) => c.name === 'Carl' && c.add.wins === 1).length;
   check('Statistik: Carl hat jetzt einen Sieg (zu zweit)', carlWins === 1 && stats2.length === 8, `${stats2.length} Meldungen`);

@@ -232,7 +232,11 @@ final class Commands implements TabExecutor {
             }
             case "vorspulen" -> {
                 if (g == null || args.length < 2) {
-                    sender.sendMessage(Component.text("/wolkenkampf vorspulen <oeffnen|nachschub|gewitter|nebel|ende|sekunden> [karte]"));
+                    sender.sendMessage(Component.text(
+                            "/wolkenkampf vorspulen <countdown|oeffnen|nachschub|gewitter|nebel|ende|sekunden> [karte]"));
+                } else if (args[1].equalsIgnoreCase("countdown")) {
+                    g.countdown();
+                    sender.sendMessage(Component.text("Countdown: " + g.map().id()));
                 } else {
                     Timeline t = g.timeline();
                     int to = switch (args[1].toLowerCase(Locale.ROOT)) {
@@ -307,7 +311,7 @@ final class Commands implements TabExecutor {
                 }
             }
         } else if (args.length == 2 && name.equals("wolkenkampf") && args[0].equalsIgnoreCase("vorspulen")) {
-            out.addAll(List.of("oeffnen", "nachschub", "gewitter", "nebel", "ende"));
+            out.addAll(List.of("countdown", "oeffnen", "nachschub", "gewitter", "nebel", "ende"));
         }
         String prefix = args.length == 0 ? "" : args[args.length - 1].toLowerCase(Locale.ROOT);
         return out.stream().filter(s -> s.toLowerCase(Locale.ROOT).startsWith(prefix)).toList();

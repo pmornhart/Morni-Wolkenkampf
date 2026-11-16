@@ -6,8 +6,8 @@ import java.util.List;
 
 /**
  * Ballon-Gondel über einer Startinsel: ein Korb (Boden aus Falltüren, Wände aus Zäunen), darüber die Hülle in Bahnen in
- * der Farbe der Insel mit Bauchbinde, dazwischen Seile und ein Brenner. Beim Start klappen die Falltüren auf – man
- * schwebt hinunter auf die Insel –, danach steigt der Ballon davon.
+ * der Farbe der Insel mit Bauchbinde, dazwischen Seile und ein Brenner. Beim Start klappen die Falltüren auf und fallen
+ * gleich darauf ganz weg – man schwebt hinunter auf die Insel –, danach steigt der Ballon ohne Boden davon.
  *
  * <p>Alle Stellen relativ zur Mitte des Korbbodens (y = 0 ist der Boden aus Falltüren, man steht auf y = 1 … also auf
  * der oberen Hälfte der Falltür).
@@ -37,6 +37,11 @@ public final class Gondola {
             }
         }
         return out;
+    }
+
+    /** Gehört die Stelle (relativ zur Mitte des Korbbodens) zum Boden aus Falltüren? */
+    public static boolean isFloor(int dx, int dy, int dz) {
+        return dy == 0 && Math.abs(dx) < HALF && Math.abs(dz) < HALF;
     }
 
     public static String trapdoor(boolean open) {

@@ -13,7 +13,8 @@ Englischer Name: **Cloud Clash**.
    Karte und Spielart ab, wählt mit der **Kiste** seine kostenlose Start-Ausrüstung und sagt mit dem **grünen
    Farbstoff** „bereit“. Ab 2 Leuten läuft ein Countdown; sind alle bereit, geht es nach 5 Sekunden los.
 2. Jedes Team steht in einer **Ballon-Gondel** in der Farbe seiner Insel (Inselfarben nach Alpenblumen: Enzian,
-   Alpenrose, Edelweiß …). Nach dem Countdown klappt der Boden auf, man schwebt sanft hinunter, die Ballons steigen davon.
+   Alpenrose, Edelweiß …). Nach dem Countdown klappt der Boden auf und fällt weg, man schwebt sanft hinunter (bis zur
+   Landung auf der Insel ohne Fallschaden), die Ballons steigen davon.
 3. Auf jeder Startinsel stehen **zwei Truhen** – zusammen immer mit Waffe, Rüstungsteil, Essen und mindestens 40
    Blöcken für die erste Brücke. Die große **Mittelinsel** hat bessere Truhen (Eisen, Diamant, Perlen, Goldäpfel).
 4. Brücken bauen, kämpfen, Gegner in die Tiefe stoßen. Wer stirbt oder in die Tiefe fällt, scheidet aus und schaut zu;
@@ -55,7 +56,7 @@ man nicht bauen, Perlen tragen nicht hinaus.
 | `/zuschauen [spieler\|karte]` | einer Runde zuschauen – auch `/spectate` |
 | `/verlassen` | Runde oder Zuschauen verlassen – auch `/leave` |
 | `/stats [spieler]` · `/top` | Statistik und die besten Wolkenkämpfer |
-| `/wolkenkampf info\|status\|start [karte] [allein\|zweier]\|vorspulen <oeffnen\|nachschub\|gewitter\|nebel\|ende\|sekunden>\|blitz\|stopp\|wiederherstellen\|neubauen\|neuladen` | Verwaltung und Tests (`moinmorni.wolkenkampf.admin`) |
+| `/wolkenkampf info\|status\|start [karte] [allein\|zweier]\|vorspulen <countdown\|oeffnen\|nachschub\|gewitter\|nebel\|ende\|sekunden>\|blitz\|stopp\|wiederherstellen\|neubauen\|neuladen` | Verwaltung und Tests (`moinmorni.wolkenkampf.admin`); `vorspulen countdown` startet in der Gondel gleich die letzten fünf Sekunden |
 
 Einstellungen stehen in der `config.yml` (Countdown, Mindestzahl, höchstens Spieler, Gondel-Zeit, Zeiten der
 Ereignisse, Nebel-Dauer). Alle Menüs sind Truhen-Fenster und gehen auch mit Bedrock (Geyser); der Nebel ist auf Java
@@ -83,13 +84,16 @@ mvn package                      # Tests + target/Morni-Wolkenkampf.jar (Java 25
 mvn -Ppaper-26.1 compile         # passt der Code auch zu Paper 26.1?
 test/run.sh                      # echter Test: Paper-Server + Test-Spieler (mineflayer)
 FRESH=1 test/run.sh              # dasselbe, Welt vorher neu bauen
+LANGSAM=8 test/run.sh            # Test-Spieler prüfen die Gondel 8 s später (wie auf einem ausgelasteten Rechner)
 ```
 
 `test/run.sh` baut das Plugin und ein Test-Netzwerk (`test/fake-network`: Bert spricht Englisch, Anna und Carl sind
 eine Party, alle Meldungen landen in `calls.log`), richtet einen Paper-26.1.2-Server ein (offline, Port 25810, RCON
 25910, kurze Zeiten) und spielt zwei Runden durch (`test/wolkenkampf-test.cjs`): allein auf der Wolkenalm (Gondel,
 Landung, Truhen, Brücke, Kampf, Hinunterstoßen, Nachschub, Gewitter, Nebel, Sieg, Statistik, Karte wieder frisch) und
-zu zweit auf dem Kristallgipfel (Party im selben Team, kein Schaden unter Teamkameraden, Zuschauer, Sieg zu zweit).
+zu zweit auf dem Kristallgipfel (Party im selben Team, beide fallen sofort durch den Boden, kein Schaden unter
+Teamkameraden, Zuschauer, Sieg zu zweit). Die Gondel öffnet sich im Test erst, wenn der Test sie geprüft hat
+(`vorspulen countdown|oeffnen`) – auf einem ausgelasteten Rechner kommen RCON-Befehle Sekunden später an.
 Mit `EXTRA_PLUGINS="…/ViaVersion.jar …/ViaBackwards.jar"` kommen ViaVersion und ViaBackwards dazu.
 
 ---

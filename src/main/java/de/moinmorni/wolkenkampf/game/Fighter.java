@@ -28,8 +28,8 @@ public final class Fighter {
     private UUID lastAttacker;
     private long lastHitAt;
     private boolean landing;
-    /** Seit dem Öffnen der Gondel einmal in der Luft gewesen (erst dann zählt Bodenkontakt als Landung). */
-    private boolean airborne;
+    /** Höhe des eigenen Gondelbodens: erst Bodenkontakt darunter zählt als Landung. */
+    private double landingFloor;
 
     Fighter(UUID uuid, String name, int team) {
         this.uuid = uuid;
@@ -116,24 +116,25 @@ public final class Fighter {
         return landing;
     }
 
-    void landing(boolean l) {
-        landing = l;
-        airborne = false;
+    /**
+     * Landeschutz an, wenn sich die Gondel öffnet.
+     *
+     * @param floorY Höhe des eigenen Gondelbodens (Unterkante des Blocks, auf dem man in der Gondel steht)
+     */
+    void startLanding(double floorY) {
+        landing = true;
+        landingFloor = floorY;
     }
 
     /**
-     * Landeschutz nachführen, jeden Tick mit dem Bodenkontakt, den der Client meldet. Gelandet ist erst, wer nach dem
-     * Öffnen einmal in der Luft war und dann wieder Boden unter den Füßen hat. Direkt nach dem Öffnen meldet der Client
-     * noch „am Boden“ – er stand ja auf dem Gondelboden, und sein nächstes Bewegungspaket kommt erst danach an. Würde
-     * das schon zählen, wäre der Schutz weg, bevor der Sturz überhaupt beginnt.
+     * Landeschutz nachführen, jeden Tick mit dem Bodenkontakt, den der Client meldet, und der Höhe der Füße. Gelandet
+     * ist erst, wer <em>unterhalb</em> des Gondelbodens Boden unter den Füßen hat. Auf Gondelhöhe zählt kein
+     * Bodenkontakt: Direkt nach dem Öffnen meldet der Client noch „am Boden“ (er stand ja auf dem Gondelboden), nach
+     * einem Teleport kurz „in der Luft“ und gleich wieder „am Boden“ – und wer auf dem Rand der Gondel stehen bleibt,
+     * steigt mit dem Ballon und fällt erst später. In all diesen Fällen bleibt der Schutz, bis man wirklich unten ist.
      */
-    void landingTick(boolean onGround) {
-        if (!landing) {
-            return;
-        }
-        if (!onGround) {
-            airborne = true;
-        } else if (airborne) {
+    void landingTick(boolean onGround, double feetY) {
+        if (landing && onGround && feetY < landingFloor) {
             landing = false;
         }
     }

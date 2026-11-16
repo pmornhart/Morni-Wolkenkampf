@@ -12,23 +12,33 @@ class FighterTest {
 
     private static final UUID ANNA = new UUID(0, 1);
     private static final UUID BERT = new UUID(0, 2);
+    /** Gondelboden (Block-Unterkante); man steht in der Gondel auf FLOOR + 1, die Insel liegt zehn Blöcke tiefer. */
+    private static final double FLOOR = 110;
 
     @Test
-    void landingProtectionLastsUntilTheFirstRealTouchdown() {
+    void landingProtectionLastsUntilGroundBelowTheGondolaFloor() {
         Fighter f = new Fighter(ANNA, "Anna", 0);
-        f.landing(true);
-        // Gondel gerade offen: der Client meldet noch „am Boden“ (stand auf dem Gondelboden) – das ist keine Landung.
-        f.landingTick(true);
-        f.landingTick(true);
-        assertTrue(f.landing(), "Schutz bleibt, solange man noch gar nicht gefallen ist");
-        f.landingTick(false);
-        f.landingTick(false);
+        f.startLanding(FLOOR);
+        // Gondel gerade offen: der Client meldet noch „am Boden“ (er stand ja auf dem Gondelboden) – keine Landung.
+        f.landingTick(true, FLOOR + 1);
+        assertTrue(f.landing(), "Schutz bleibt, solange man noch in der Gondel steht");
+        // Nach einem Teleport meldet der Client einmal „nicht am Boden“ und gleich wieder „am Boden“ – noch oben.
+        f.landingTick(false, FLOOR + 1);
+        f.landingTick(true, FLOOR + 1);
+        assertTrue(f.landing(), "Wackeln auf Gondelhöhe beendet den Schutz nicht");
+        // Wer auf einer Kante oder dem Rand der Gondel stehen bleibt und mit dem Ballon steigt, bleibt geschützt.
+        f.landingTick(true, FLOOR + 6);
+        assertTrue(f.landing(), "oben auf der steigenden Gondel geschützt");
+        f.landingTick(false, FLOOR - 4);
         assertTrue(f.landing(), "im Fall geschützt");
-        f.landingTick(true);
+        f.landingTick(true, FLOOR - 9);
         assertFalse(f.landing(), "auf der Insel gelandet – ab jetzt gilt Fallschaden wieder");
-        // Neue Runde: Schutz wieder an, „in der Luft gewesen“ zählt von vorn.
-        f.landing(true);
-        f.landingTick(true);
+        // Wieder hinaufgeklettert: der Schutz kommt nicht zurück.
+        f.landingTick(true, FLOOR + 1);
+        assertFalse(f.landing());
+        // Neue Runde: Schutz wieder an.
+        f.startLanding(FLOOR);
+        f.landingTick(true, FLOOR + 1);
         assertTrue(f.landing());
     }
 

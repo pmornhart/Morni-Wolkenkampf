@@ -6,6 +6,7 @@
 #   KEEP=1 test/run.sh          # Server danach laufen lassen (zum Nachschauen, z. B. für Bilder)
 #   KEEP=1 SKIP_TEST=1 test/run.sh   # nur Server starten
 #   FRESH=1 test/run.sh         # Welt vorher löschen (alles wird neu gebaut)
+#   LANGSAM=8 test/run.sh       # Test-Spieler prüfen die Gondel 8 s später (wie auf einem ausgelasteten Rechner)
 #
 # Erwartet (Vorgaben für die MoinMorni-Sandbox, alles per Umgebungsvariable änderbar):
 #   WK_JAVA       Java 25 (Ordner; sonst die JDK 25 aus dem Cache, sonst JAVA_HOME)
@@ -40,8 +41,8 @@ echo "== Bauen"
 
 echo "== Server einrichten: $SERVER"
 if [ "${FRESH:-0}" = "1" ]; then
-  # Welt und Bau-Stand vergessen: alles wird neu gebaut.
-  rm -rf "$SERVER/wolkenkampf" "$SERVER/plugins/MorniWolkenkampf/bau.yml"
+  # Welt und Bau-Stand vergessen: alles wird neu gebaut (Paper 26 legt eigene Welten unter world/dimensions/ ab).
+  rm -rf "$SERVER/wolkenkampf" "$SERVER/world/dimensions/minecraft/wolkenkampf" "$SERVER/plugins/MorniWolkenkampf/bau.yml"
 fi
 mkdir -p "$SERVER/plugins/MorniWolkenkampf" "$SERVER/plugins/MoinMorni"
 if [ -d "$TEMPLATE" ] && [ ! -d "$SERVER/libraries" ]; then
@@ -72,7 +73,9 @@ enforce-whitelist=false
 motd=Morni Wolkenkampf Test
 allow-flight=true
 EOF
-# Testwerte: kurzer Countdown, kurze Gondelzeit, Ereignisse weit weg (der Test spult vor).
+# Testwerte: kurzer Countdown, Ereignisse weit weg (der Test spult vor). Die Gondel wartet lange – der Test öffnet sie
+# selbst, sobald er sie geprüft hat (/wolkenkampf vorspulen countdown|oeffnen); mit einer kurzen festen Zeit liefen die
+# Prüfungen auf einem ausgelasteten Rechner (RCON-Antworten kommen dann Sekunden später) schon nach dem Öffnen.
 cat > "$SERVER/plugins/MorniWolkenkampf/config.yml" <<'EOF'
 welt: wolkenkampf
 wolkenhafen:
@@ -80,7 +83,7 @@ wolkenhafen:
   mindestens-spieler: 3
 runde:
   hoechstens-spieler: 12
-  gondel-sekunden: 6
+  gondel-sekunden: 60
   nachspiel-sekunden: 4
 ereignisse:
   nachschub: 600
