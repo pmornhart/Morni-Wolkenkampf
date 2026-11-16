@@ -228,7 +228,7 @@ final class WolkenalmPlan {
     /** Wolkenmeer unten, ferne Gipfel, kleine Wolken und schwebende Alm-Inselchen außerhalb des Randes. */
     private static void scenery(Plan p, MapLayout layout, Random r) {
         Decor.cloudSea(p, -58, 10, 200, r);
-        Decor.mountainRing(p, -60, 150, r);
+        Decor.mountainRing(p, -60, 112, r);
         int border = layout.border();
         for (int i = 0; i < 9; i++) {
             double a = 2 * Math.PI * i / 9 + r.nextDouble() * 0.4;

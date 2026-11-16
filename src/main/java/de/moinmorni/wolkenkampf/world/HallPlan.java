@@ -85,7 +85,7 @@ public final class HallPlan {
                     3 + r.nextInt(3), r);
         }
         Decor.cloudSea(p, -58, 0, 180, r);
-        Decor.mountainRing(p, -60, 140, r);
+        Decor.mountainRing(p, -60, 100, r);
         barrierRing(p);
         p.connect();
         return p;

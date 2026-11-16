@@ -208,7 +208,7 @@ final class Commands implements TabExecutor {
                 sender.sendMessage(Component.text("Wolkenkampf: bereit=" + plugin.ready() + " netzwerk="
                         + plugin.net().connected() + " wolkenhafen=" + plugin.hall().waiting().size() + " countdown="
                         + plugin.hall().countdown() + " runden=" + plugin.games().all().size() + " frei="
-                        + plugin.games().free().stream().map(MapType::id).toList() + " zurueckgesetzt="
+                        + String.join(",", plugin.games().free().stream().map(MapType::id).toList()) + " zurueckgesetzt="
                         + plugin.construction().lastRestored()));
                 for (Game x : plugin.games().all()) {
                     sender.sendMessage(Component.text(x.status()));

@@ -284,7 +284,7 @@ public final class Game {
     /** Für /wolkenkampf status (Tests, Verwaltung). */
     public String status() {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(Locale.ROOT, "karte=%s art=%s phase=%s zeit=%d lebend=%d teams=%d nebel=%.1f blitze=%d "
+        sb.append(String.format(Locale.ROOT, "karte=%s art=%s phase=%s zeit=%d lebend=%d teams_lebend=%d nebel=%.1f blitze=%d "
                 + "nachschub=%d gondel=%d", map.id(), mode.id(), phase, seconds, aliveCount(), aliveTeams(), fogLevel,
                 strikeCount, refills, riseStep));
         for (Fighter f : fighters.values()) {
@@ -297,6 +297,11 @@ public final class Game {
             if (p != null) {
                 sb.append(' ').append(p.getName()).append("=SPECTATOR");
             }
+        }
+        for (Team t : teams) {
+            MapLayout.Island is = layout.starts().get(t.island());
+            sb.append(String.format(Locale.ROOT, " team%d=%d:%d:%d:%d:%d", t.number(), t.island(), map.originX() + is.x(),
+                    map.originZ() + is.z(), MapType.FLOOR_Y + is.top(), MapType.FLOOR_Y + is.gondolaY()));
         }
         return sb.toString();
     }

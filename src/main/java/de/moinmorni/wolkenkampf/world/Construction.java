@@ -39,6 +39,8 @@ public final class Construction {
     public static final int VERSION = 1;
     private static final long BUDGET_NANOS = 25_000_000L;
     private static final int CHECK_EVERY = 256;
+    /** Mit -Dwolkenkampf.debug=true nennt die Wiederherstellung die ersten zurückgesetzten Blöcke. */
+    private static final boolean DEBUG = Boolean.getBoolean("wolkenkampf.debug");
 
     private interface Job {
         boolean step(long deadline);
@@ -276,10 +278,17 @@ public final class Construction {
                                 BlockData cur = snap.getBlockData(lx, y, lz);
                                 if (want == null) {
                                     if (!cur.getMaterial().isAir()) {
+                                        if (changed[0] < 8 && DEBUG) {
+                                            log.info("Weggeräumt bei " + x + " " + y + " " + z + ": " + cur.getAsString());
+                                        }
                                         world.getBlockAt(x, y, z).setType(Material.AIR, false);
                                         changed[0]++;
                                     }
                                 } else if (!cur.equals(want)) {
+                                    if (changed[0] < 8 && DEBUG) {
+                                        log.info("Zurückgesetzt bei " + x + " " + y + " " + z + ": " + cur.getAsString()
+                                                + " → " + want.getAsString());
+                                    }
                                     Block block = world.getBlockAt(x, y, z);
                                     block.setBlockData(want, false);
                                     Plan.Banner banner = plan.bannerAt(x - ox, y - oy, z - oz);

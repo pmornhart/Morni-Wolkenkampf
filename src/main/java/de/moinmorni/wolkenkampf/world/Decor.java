@@ -266,7 +266,7 @@ final class Decor {
             double a = 2 * Math.PI * i / count + r.nextDouble() * 0.5;
             double d = distance + r.nextInt(30);
             mountain(p, (int) Math.round(Math.cos(a) * d), (int) Math.round(Math.sin(a) * d), y0, 22 + r.nextInt(14),
-                    38 + r.nextInt(26), r);
+                    52 + r.nextInt(28), r);
         }
     }
 

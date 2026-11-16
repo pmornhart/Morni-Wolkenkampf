@@ -223,7 +223,7 @@ final class KristallgipfelPlan {
     /** Wolkenmeer, Gletschergipfel in der Ferne, schwebende Kristalle außerhalb des Randes. */
     private static void scenery(Plan p, MapLayout layout, Random r) {
         Decor.cloudSea(p, -58, 10, 200, r);
-        Decor.mountainRing(p, -60, 145, r);
+        Decor.mountainRing(p, -60, 110, r);
         int border = layout.border();
         for (int i = 0; i < 8; i++) {
             double a = 2 * Math.PI * i / 8 + r.nextDouble() * 0.4;
