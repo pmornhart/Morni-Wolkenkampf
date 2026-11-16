@@ -5,6 +5,7 @@ import de.moinmorni.wolkenkampf.Texts;
 import de.moinmorni.wolkenkampf.Ui;
 import de.moinmorni.wolkenkampf.WolkenkampfPlugin;
 import de.moinmorni.wolkenkampf.data.PlayerData;
+import de.moinmorni.wolkenkampf.logic.Comeback;
 import de.moinmorni.wolkenkampf.logic.IslandColour;
 import de.moinmorni.wolkenkampf.logic.Loot;
 import de.moinmorni.wolkenkampf.logic.MapLayout;
@@ -17,6 +18,8 @@ import de.moinmorni.wolkenkampf.world.MapType;
 import de.moinmorni.wolkenkampf.world.Plan;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -65,9 +68,9 @@ public final class Game {
         GONDOLA, FIGHT, OVER
     }
 
-    /** Warum jemand ausscheidet. */
+    /** Warum jemand ausscheidet (AWAY: nach einem Verbindungsabbruch nicht rechtzeitig zurück). */
     public enum Cause {
-        KILLED, VOID, FOG, STORM, BORDER, LEFT, OTHER
+        KILLED, VOID, FOG, STORM, BORDER, LEFT, AWAY, OTHER
     }
 
     public static final String FIREWORK_TAG = "wolkenkampf_feuerwerk";
@@ -125,6 +128,13 @@ public final class Game {
     private final List<Strike> strikes = new ArrayList<>();
     private final List<org.bukkit.entity.BlockDisplay> fog = new ArrayList<>();
     private final LangBar bar = new LangBar(BossBar.Color.BLUE, BossBar.Overlay.PROGRESS);
+    /** Wer gerade die Verbindung verloren hat und zurückkommen darf (Frist in Spielticks dieser Runde). */
+    private final Comeback comeback = new Comeback();
+    /** Wo sie waren und was sie dabeihatten – fällt dort hin, wenn sie nicht rechtzeitig zurückkommen. */
+    private final Map<UUID, Location> awayAt = new HashMap<>();
+    private final Map<UUID, ItemStack[]> awayItems = new HashMap<>();
+    /** Wem das Netzwerk gerade „spielt“ glaubt (nur Änderungen werden gemeldet). */
+    private final Set<UUID> told = new HashSet<>();
     private Phase phase = Phase.GONDOLA;
     private int phaseTicks;
     private int ticks;
@@ -172,6 +182,7 @@ public final class Game {
                 plugin.boards().sidebar().teams(p, colours);
                 p.teleport(gondolaSpot(t, m));
                 prepare(p, GameMode.ADVENTURE);
+                tellPlaying(p, true);
                 String lang = plugin.lang(p);
                 p.sendMessage(Texts.msg(lang, "game.welcome", Placeholder.unparsed("map", Texts.plain(lang, "map." + map.id())),
                         Placeholder.unparsed("secs", String.valueOf(settings.gondolaSeconds()))));
@@ -222,6 +233,11 @@ public final class Game {
 
     public boolean spectating(UUID uuid) {
         return spectators.contains(uuid);
+    }
+
+    /** Wartet die Runde gerade auf diese Person (Verbindung verloren, Platz noch frei)? */
+    public boolean waitingFor(UUID uuid) {
+        return comeback.waitingFor(uuid);
     }
 
     /** Lebende, verbundene Spieler. */
@@ -301,8 +317,8 @@ public final class Game {
                 strikeCount, refills, riseStep));
         for (Fighter f : fighters.values()) {
             Team t = team(f);
-            sb.append(String.format(Locale.ROOT, " %s=%s:t%d:i%d:k%d:c%d:p%d", f.name(), f.state(), t.number(), t.island(),
-                    f.kills(), f.chests(), f.place()));
+            sb.append(String.format(Locale.ROOT, " %s=%s:t%d:i%d:k%d:c%d:p%d:w%d", f.name(), f.state(), t.number(),
+                    t.island(), f.kills(), f.chests(), f.place(), comeback.secondsLeft(f.uuid(), ticks)));
         }
         for (UUID u : spectators) {
             Player p = Bukkit.getPlayer(u);
@@ -404,27 +420,148 @@ public final class Game {
         p.setLevel(0);
     }
 
-    /** Wiederkommen nach Verbindungsabbruch: wer ausgeschieden ist (oder die Runde läuft schon), schaut zu. */
+    /**
+     * Wiederkommen nach einem Verbindungsabbruch: Ist der Platz noch frei ({@code rueckkehr-sekunden}), geht es genau dort
+     * weiter, wo man war – Insel, Sachen, Team. Sonst (ausgeschieden oder zu spät) schaut man zu, wie bisher.
+     */
     public void rejoin(Player p) {
-        Fighter f = fighters.get(p.getUniqueId());
+        UUID u = p.getUniqueId();
+        Fighter f = fighters.get(u);
+        if (f != null && comeback.waitingFor(u)) {
+            if (comeback.back(u, ticks) && f.alive() && phase != Phase.OVER) {
+                comeBack(p, f);
+                return;
+            }
+            tooLate(u);
+        }
         if (f != null) {
             f.online(true);
         }
         spectate(p);
     }
 
-    /** Verbindung weg: wer noch dabei war, scheidet aus (seine Sachen bleiben liegen). */
+    /**
+     * Verbindung weg. Wer noch dabei ist, behält seinen Platz {@code rueckkehr-sekunden} lang (Insel, Sachen, Team) –
+     * so lange bietet die Lobby „Zurück ins Spiel“ an. Wer gerade von einem Gegner getroffen wurde (oder ohne
+     * Rückkehr-Zeit), scheidet wie bisher sofort aus; seine Sachen bleiben liegen.
+     */
     public void quit(Player p) {
         Fighter f = fighters.get(p.getUniqueId());
         spectators.remove(p.getUniqueId());
+        // Das Netzwerk vergisst „spielt gerade“, sobald jemand den Server verlässt.
+        told.remove(p.getUniqueId());
         bar.hide(p);
         if (f == null) {
+            return;
+        }
+        int seconds = settings.comebackSeconds();
+        boolean inCombat = f.creditTo(Bukkit.getCurrentTick()) != null;
+        if (Comeback.holds(seconds, phase != Phase.OVER, f.alive(), inCombat)) {
+            f.online(false);
+            hold(p, f, seconds);
             return;
         }
         if (f.alive() && phase != Phase.OVER) {
             eliminate(p, f, Cause.LEFT, null, true);
         }
         f.online(false);
+    }
+
+    /** Platz freihalten: merken, wo jemand war und was er dabeihatte; die anderen erfahren, dass gewartet wird. */
+    private void hold(Player p, Fighter f, int seconds) {
+        comeback.away(f.uuid(), ticks, seconds);
+        awayAt.put(f.uuid(), p.getLocation());
+        ItemStack[] items = p.getInventory().getContents();
+        for (int i = 0; i < items.length; i++) {
+            items[i] = items[i] == null ? null : items[i].clone();
+        }
+        awayItems.put(f.uuid(), items);
+        plugin.net().holdSlot(f.uuid(), seconds);
+        broadcast(lang -> Texts.msg(lang, "game.away", Placeholder.unparsed("name", f.name()),
+                Placeholder.unparsed("secs", String.valueOf(seconds))));
+        plugin.boards().game(this);
+    }
+
+    /**
+     * Rechtzeitig zurück: Minecraft hat Ort, Sachen, Leben und Effekte gespeichert – es geht genau dort weiter. Hat sich
+     * die Gondel inzwischen geöffnet, kommt der Start (Ausrüstung, langsam hinunterschweben) jetzt.
+     */
+    private void comeBack(Player p, Fighter f) {
+        UUID u = f.uuid();
+        awayAt.remove(u);
+        awayItems.remove(u);
+        f.online(true);
+        plugin.net().holdSlot(u, 0);
+        tellPlaying(p, true);
+        board(p);
+        plugin.boards().sidebar().teams(p, nameColours());
+        String lang = plugin.lang(p);
+        Team t = team(f);
+        if (phase == Phase.GONDOLA) {
+            p.teleport(gondolaSpot(t, t.members().indexOf(u)));
+        } else if (!f.started()) {
+            p.teleport(gondolaSpot(t, t.members().indexOf(u)));
+            start(p, f, false);
+            p.sendMessage(Texts.msg(lang, "game.back.missed"));
+        }
+        Ui.title(p, Texts.text(lang, "game.back.title"), Texts.text(lang, "game.back.sub"), 2500);
+        Ui.sound(p, "minecraft:entity.player.levelup", 1.2f);
+        p.sendMessage(Texts.msg(lang, "game.back"));
+        for (Player o : audience()) {
+            if (!o.equals(p)) {
+                o.sendMessage(Texts.msg(plugin.lang(o), "game.back.all", Placeholder.unparsed("name", f.name())));
+            }
+        }
+        plugin.boards().game(this);
+    }
+
+    /** Nicht rechtzeitig zurück: scheidet aus wie früher beim Verlassen – seine Sachen fallen dort, wo er war. */
+    private void tooLate(UUID u) {
+        plugin.net().holdSlot(u, 0);
+        Location at = awayAt.remove(u);
+        ItemStack[] items = awayItems.remove(u);
+        Fighter f = fighters.get(u);
+        if (f == null || !f.alive() || phase == Phase.OVER) {
+            return;
+        }
+        if (at != null && items != null && at.getWorld() == world && at.getY() > MapType.FLOOR_Y + layout.voidY()) {
+            for (ItemStack item : items) {
+                if (item != null && !item.getType().isAir()) {
+                    world.dropItemNaturally(at, item);
+                }
+            }
+        }
+        eliminate(null, f, Cause.AWAY, null, false);
+    }
+
+    /** Jede Sekunde: wer zu lange weg ist, scheidet aus. */
+    private void expireAbsent() {
+        for (UUID u : comeback.expired(ticks)) {
+            tooLate(u);
+        }
+    }
+
+    /** Runde vorbei oder abgebrochen: niemand muss mehr zurück („Zurück ins Spiel“ zurücknehmen), niemand spielt mehr. */
+    private void releaseAll() {
+        for (UUID u : comeback.clear()) {
+            plugin.net().holdSlot(u, 0);
+        }
+        awayAt.clear();
+        awayItems.clear();
+        for (UUID u : new ArrayList<>(told)) {
+            Player p = Bukkit.getPlayer(u);
+            if (p != null) {
+                tellPlaying(p, false);
+            }
+        }
+        told.clear();
+    }
+
+    /** Dem Netzwerk sagen, ob jemand gerade spielt (dann fragt „/lobby“ erst nach) – nur bei Änderungen. */
+    private void tellPlaying(Player p, boolean playing) {
+        if (playing ? told.add(p.getUniqueId()) : told.remove(p.getUniqueId())) {
+            plugin.net().playing(p, playing);
+        }
     }
 
     /** Freiwillig gehen (/verlassen). Wer noch kämpft, scheidet aus; die Runde zählt als gespielt. */
@@ -438,6 +575,7 @@ public final class Game {
             }
             f.online(false);
         }
+        tellPlaying(p, false);
     }
 
     /** Zuschauen (Ausgeschiedene, Leute aus dem Wolkenhafen, Wiederkommende). */
@@ -459,6 +597,9 @@ public final class Game {
     /** Jeder Tick. false = Runde ist vorbei und kann weg. */
     public boolean tick() {
         ticks++;
+        if (ticks % SECOND == 0 && phase != Phase.OVER && comeback.count() > 0) {
+            expireAbsent();
+        }
         switch (phase) {
             case GONDOLA -> tickGondola();
             case FIGHT -> tickFight();
@@ -546,24 +687,32 @@ public final class Game {
         floorDrop = FLOOR_DROP;
         for (Fighter f : fighters.values()) {
             Player p = Bukkit.getPlayer(f.uuid());
-            if (p == null || !f.alive()) {
+            if (p == null || !f.alive() || !f.online()) {
                 continue;
             }
-            String lang = plugin.lang(p);
-            p.setGameMode(GameMode.SURVIVAL);
-            p.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, SLOW_FALL_TICKS, 0, false, false, true));
-            f.startLanding(MapType.FLOOR_Y + layout.starts().get(team(f).island()).gondolaY());
-            StartKit kit = kitOf(p);
-            for (ItemStack item : LootItems.kit(kit, map)) {
-                p.getInventory().addItem(item);
-            }
-            Ui.title(p, Texts.text(lang, "game.go"), Texts.text(lang, "game.go.sub"), 1800);
-            Ui.sound(p, "minecraft:entity.firework_rocket.launch", 1.2f);
-            p.sendMessage(Texts.msg(lang, "game.started", Placeholder.unparsed("kit", Texts.plain(lang, "kit." + kit.id()))));
+            start(p, f, true);
         }
         riseTicks = RISE_DELAY;
         updateBar();
         plugin.stateChanged();
+    }
+
+    /** Gondel offen: Überlebensmodus, langsam hinunterschweben (kein Fallschaden bis unten), Start-Ausrüstung. */
+    private void start(Player p, Fighter f, boolean announce) {
+        f.started(true);
+        String lang = plugin.lang(p);
+        p.setGameMode(GameMode.SURVIVAL);
+        p.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, SLOW_FALL_TICKS, 0, false, false, true));
+        f.startLanding(MapType.FLOOR_Y + layout.starts().get(team(f).island()).gondolaY());
+        StartKit kit = kitOf(p);
+        for (ItemStack item : LootItems.kit(kit, map)) {
+            p.getInventory().addItem(item);
+        }
+        if (announce) {
+            Ui.title(p, Texts.text(lang, "game.go"), Texts.text(lang, "game.go.sub"), 1800);
+            Ui.sound(p, "minecraft:entity.firework_rocket.launch", 1.2f);
+        }
+        p.sendMessage(Texts.msg(lang, "game.started", Placeholder.unparsed("kit", Texts.plain(lang, "kit." + kit.id()))));
     }
 
     private Block floorBlock(MapLayout.Island is, int[] f) {
@@ -1024,6 +1173,11 @@ public final class Game {
             return;
         }
         f.state(Fighter.State.OUT);
+        if (p != null) {
+            tellPlaying(p, false);
+        } else {
+            told.remove(f.uuid());
+        }
         UUID killerId = killer != null ? killer.getUniqueId() : f.creditTo(Bukkit.getCurrentTick());
         Fighter k = killerId == null || sameTeam(killerId, f.uuid()) ? null : fighters.get(killerId);
         if (k != null) {
@@ -1058,6 +1212,7 @@ public final class Game {
             case STORM -> "elim.storm";
             case BORDER -> "elim.border";
             case LEFT -> "elim.left";
+            case AWAY -> "elim.away";
             case OTHER -> "elim.died";
         };
         String killerName = k == null ? "" : k.name();
@@ -1099,6 +1254,7 @@ public final class Game {
                 fighters.get(u).place(1);
             }
         }
+        releaseAll();
         String names = won == null ? "" : teamNames(won);
         for (Player p : audience()) {
             String lang = plugin.lang(p);
@@ -1177,6 +1333,7 @@ public final class Game {
     /** Runde abbrechen oder fertig: alle zurück in den Wolkenhafen, Karte wiederherstellen. */
     public void close() {
         phase = Phase.OVER;
+        releaseAll();
         for (Player p : audience()) {
             bar.hide(p);
             p.setInvulnerable(false);

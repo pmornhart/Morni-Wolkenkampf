@@ -27,6 +27,13 @@ Englischer Name: **Cloud Clash**.
 6. Das letzte Team, das noch steht, gewinnt. Danach geht es zurück in den Wolkenhafen, und die Karte wird Block für
    Block wiederhergestellt.
 
+**Zurück ins Spiel:** Verliert jemand mitten in der Runde die Verbindung (zum Beispiel, weil das Spiel abstürzt), bleibt
+sein Platz eine Weile frei (`rueckkehr-sekunden`, Vorgabe 90). Kommt er rechtzeitig wieder – direkt oder über „Zurück
+ins Spiel“ in der Lobby –, steht er genau dort, wo er war: gleiche Insel, gleiche Sachen, gleiches Team („Willkommen
+zurück!“). Hat sich die Gondel inzwischen geöffnet, schwebt er auf seine Insel hinunter und bekommt seine
+Start-Ausrüstung. Kommt er zu spät, scheidet er aus wie bisher und seine Sachen fallen dort, wo er war. Wer gerade von
+einem Gegner getroffen wurde, scheidet beim Verlassen sofort aus – sonst rettete ein Verbindungsabbruch aus jedem Kampf.
+
 **Spielarten:** Allein (jeder eine Insel) oder **Zu zweit** (ab 3 Leuten; eine Party von zwei kommt ins selbe Team, kein
 Schaden unter Teamkameraden).
 
@@ -58,8 +65,8 @@ man nicht bauen, Perlen tragen nicht hinaus.
 | `/stats [spieler]` · `/top` | Statistik und die besten Wolkenkämpfer |
 | `/wolkenkampf info\|status\|start [karte] [allein\|zweier]\|vorspulen <countdown\|oeffnen\|nachschub\|gewitter\|nebel\|ende\|sekunden>\|blitz\|stopp\|wiederherstellen\|neubauen\|neuladen` | Verwaltung und Tests (`moinmorni.wolkenkampf.admin`); `vorspulen countdown` startet in der Gondel gleich die letzten fünf Sekunden |
 
-Einstellungen stehen in der `config.yml` (Countdown, Mindestzahl, höchstens Spieler, Gondel-Zeit, Zeiten der
-Ereignisse, Nebel-Dauer). Alle Menüs sind Truhen-Fenster und gehen auch mit Bedrock (Geyser); der Nebel ist auf Java
+Einstellungen stehen in der `config.yml` (Zurück-ins-Spiel-Zeit, Countdown, Mindestzahl, höchstens Spieler,
+Gondel-Zeit, Zeiten der Ereignisse, Nebel-Dauer). Alle Menüs sind Truhen-Fenster und gehen auch mit Bedrock (Geyser); der Nebel ist auf Java
 zusätzlich als steigende Fläche zu sehen, auf Bedrock als Schwaden.
 
 ## Im Netzwerk
@@ -67,6 +74,12 @@ zusätzlich als steigende Fläche zu sehen, auf Bedrock als Schwaden.
 Das Netzwerk-Plugin („MoinMorni“) stellt die Schnittstelle `de.moinmorni.api.MoinMorni` bereit; Wolkenkampf nutzt sie,
 wenn sie da ist (`softdepend`): Sprache, Party (zusammen in eine Runde, zu zweit ins selbe Team), Statistik, Zustand,
 zurück zur Lobby. Ohne Netzwerk kommt die Sprache aus dem Client.
+
+Ab Version 2 der Schnittstelle meldet Wolkenkampf außerdem, wer gerade **spielt** (`playing`: ab dem Rundenstart bis
+zum Ausscheiden oder Rundenende – so lange fragt „/lobby“ erst nach), schickt das Bett im Wolkenhafen über
+`askToLobby` in die Lobby und hält nach einem Verbindungsabbruch den Platz frei (`holdSlot(uuid, sekunden)`, nach der
+Rückkehr, bei Rundenende oder zu spät `holdSlot(uuid, 0)`). Ein älteres Netzwerk-Plugin kennt diese Methoden nicht –
+dann geht es ohne Nachfrage und ohne Angebot in der Lobby weiter wie bisher.
 
 Statistik nach jeder Runde (`stats("wolkenkampf", …)`, höher ist besser):
 
@@ -89,10 +102,11 @@ LANGSAM=8 test/run.sh            # Test-Spieler prüfen die Gondel 8 s später (
 
 `test/run.sh` baut das Plugin und ein Test-Netzwerk (`test/fake-network`: Bert spricht Englisch, Anna und Carl sind
 eine Party, alle Meldungen landen in `calls.log`), richtet einen Paper-26.1.2-Server ein (offline, Port 25810, RCON
-25910, kurze Zeiten) und spielt zwei Runden durch (`test/wolkenkampf-test.cjs`): allein auf der Wolkenalm (Gondel,
-Landung, Truhen, Brücke, Kampf, Hinunterstoßen, Nachschub, Gewitter, Nebel, Sieg, Statistik, Karte wieder frisch) und
-zu zweit auf dem Kristallgipfel (Party im selben Team, beide fallen sofort durch den Boden, kein Schaden unter
-Teamkameraden, Zuschauer, Sieg zu zweit). Die Gondel öffnet sich im Test erst, wenn der Test sie geprüft hat
+25910, kurze Zeiten, 20 s Zurück ins Spiel) und spielt zwei Runden durch (`test/wolkenkampf-test.cjs`): allein auf
+der Wolkenalm (Gondel, Landung, Truhen, Verbindung weg und rechtzeitig zurück, Brücke, Kampf, Hinunterstoßen,
+Nachschub, Gewitter, Nebel, Sieg, Statistik, Karte wieder frisch) und zu zweit auf dem Kristallgipfel (Party im selben
+Team, beide fallen sofort durch den Boden, kein Schaden unter Teamkameraden, Zuschauer, mitten im Kampf gehen, zu spät
+zurück, Sieg zu zweit). Die Gondel öffnet sich im Test erst, wenn der Test sie geprüft hat
 (`vorspulen countdown|oeffnen`) – auf einem ausgelasteten Rechner kommen RCON-Befehle Sekunden später an.
 Mit `EXTRA_PLUGINS="…/ViaVersion.jar …/ViaBackwards.jar"` kommen ViaVersion und ViaBackwards dazu.
 

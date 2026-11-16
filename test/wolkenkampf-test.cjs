@@ -6,9 +6,12 @@
  * Party kommen vom Test-Netzwerk (test/fake-network), das auch Statistik, Zustand und „zur Lobby“ in calls.log
  * mitschreibt.
  *
- * Runde 1: allein auf der Wolkenalm – Gondel, Landung, Truhen, Brücke, Kampf, Hinunterstoßen, Nachschub, Gewitter,
- * Nebel, Sieg, Statistik, Karte wieder frisch. Runde 2: zu zweit auf dem Kristallgipfel – Party im selben Team, beide
- * fallen sofort durch den Boden, kein Schaden unter Teamkameraden, Zuschauen, Sieg zu zweit.
+ * Runde 1: allein auf der Wolkenalm – Gondel, Landung, Truhen, Dora verliert die Verbindung und kommt rechtzeitig
+ * zurück (gleiche Stelle, gleiche Sachen), Brücke, Kampf, Hinunterstoßen, Nachschub, Gewitter, Nebel, Sieg, Statistik,
+ * Karte wieder frisch. Runde 2: zu zweit auf dem Kristallgipfel – Party im selben Team, beide fallen sofort durch den
+ * Boden, kein Schaden unter Teamkameraden, Zuschauen, Carl geht mitten im Kampf (scheidet sofort aus), Dora kommt zu
+ * spät zurück, Sieg zu zweit. Das Test-Netzwerk schreibt „spielt gerade“, „Platz freihalten“ und die Nachfrage vor der
+ * Lobby mit (rueckkehr-sekunden ist im Test 20).
  *
  * Die Gondel öffnet sich erst, wenn der Test es sagt (gondel-sekunden in test/run.sh ist lang, der Test schickt
  * „/wolkenkampf vorspulen countdown|oeffnen“): auf einem ausgelasteten Rechner kommen Befehle über RCON erst Sekunden
@@ -30,6 +33,7 @@ const PASS = fs.readFileSync(PASS_FILE, 'utf8').trim();
 const VERSION = process.env.MC_VERSION ?? '26.1';
 const SLOW_MS = Number(process.env.LANGSAM ?? 0) * 1000;
 const HALL = { x: 0.5, y: 101, z: 11.5 };
+const COMEBACK = 20;
 const FLOOR = 100;
 
 const results = [];
@@ -149,9 +153,9 @@ async function status() {
         if (v === 'SPECTATOR') {
           s.players[k] = { state: 'SPECTATOR' };
         } else {
-          const [state, t, i, kk, c, p] = v.split(':');
+          const [state, t, i, kk, c, p, w = 'w0'] = v.split(':');
           s.players[k] = { state, team: Number(t.slice(1)), island: Number(i.slice(1)), kills: Number(kk.slice(1)),
-            chests: Number(c.slice(1)), place: Number(p.slice(1)) };
+            chests: Number(c.slice(1)), place: Number(p.slice(1)), waiting: Number(w.slice(1)) };
         }
       } else {
         s[k] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v;
@@ -184,6 +188,11 @@ async function tp(bot, x, y, z, yaw = 0, pitch = 0) {
   await waitFor(() => near(bot.entity.position, { x, y, z }, 1.5), 3000, 100);
   await sleep(300);
 }
+
+/** Sachen im Inventar, sortiert („name×anzahl“). */
+const invList = (bot) => bot.inventory.items().map((i) => `${i.name}×${i.count}`).sort().join(',');
+/** Netzwerk-Aufrufe einer Art für einen Namen (ab Stelle {from} in calls.log). */
+const callsOf = (t, name, from = 0) => calls().slice(from).filter((c) => c.t === t && c.name === name);
 
 function invHas(bot, name) {
   return bot.inventory.items().some((i) => i.name === name);
@@ -315,8 +324,8 @@ async function main() {
   clear(anna, bert);
   await sleep(1500);
   check('Kein Countdown mit 2 von 3 nötigen Leuten', !anna.bars.some((b) => /Nächste Runde/.test(b)), anna.bars.slice(-1)[0]);
-  const carl = await join('Carl');
-  const dora = await join('Dora');
+  let carl = await join('Carl');
+  let dora = await join('Dora');
   check('Mit 4 Leuten läuft der Countdown', await waitFor(() => anna.bars.some((b) => /Nächste Runde in \d+ s · Wolkenalm · Allein/.test(b)), 4000),
     anna.bars.slice(-1)[0]);
   for (const b of [anna, bert, carl, dora]) {
@@ -378,6 +387,8 @@ async function main() {
   check('Die Ballons steigen auf und verschwinden', await waitFor(async () => (await status()).wolkenalm.gondel >= 16, 12000, 500) &&
     await passed(`execute if block ${annaT.x} ${annaT.gy} ${annaT.z} air`));
   check('Netzwerk: Zustand „running“', calls().some((c) => c.t === 'state' && c.state === 'running'));
+  check('Netzwerk: alle vier „spielen gerade“ (Nachfrage vor der Lobby)', ['Anna', 'Bert', 'Carl', 'Dora'].every((n) =>
+    callsOf('playing', n).some((c) => c.playing === true)), calls().filter((c) => c.t === 'playing').map((c) => `${c.name}:${c.playing}`).join(' '));
 
   // ------------------------------------------------------------------ Truhen
   const islandChests = () => anna.findBlocks({ matching: (b) => b.name === 'chest', maxDistance: 12, count: 8 })
@@ -401,6 +412,37 @@ async function main() {
     `${blocksIn} Blöcke: ${contents.map((i) => `${i.name}×${i.count}`).join(', ')}`);
   s = (await status()).wolkenalm;
   check('Statistik zählt geöffnete Truhen (2)', s.players.Anna.chests === 2, JSON.stringify(s.players.Anna));
+
+  // ------------------------------------------------------------------ Zurück ins Spiel (rechtzeitig)
+  await cmd('give Dora minecraft:oak_planks 7', 'give Dora minecraft:iron_sword 1');
+  await waitFor(() => invHas(dora, 'iron_sword') && invHas(dora, 'oak_planks'), 3000);
+  await waitFor(() => dora.entity.onGround, 3000);
+  const doraBefore = { pos: dora.entity.position.clone(), items: invList(dora), team: s.players.Dora.team, island: s.players.Dora.island };
+  let mark = calls().length;
+  clear(anna);
+  dora.quit();
+  check(`Dora verliert die Verbindung: Platz bleibt ${COMEBACK} s frei (Netzwerk: holdSlot ${COMEBACK})`,
+    await waitFor(() => callsOf('hold-slot', 'Dora', mark).some((c) => c.seconds === COMEBACK), 5000),
+    JSON.stringify(calls().slice(mark)));
+  check('Die anderen erfahren es („Dora hat die Verbindung verloren“)', await waitFor(() =>
+    sees(anna, new RegExp(`Dora hat die Verbindung verloren – der Platz bleibt ${COMEBACK} Sekunden frei`)), 3000), anna.chats.slice(-1)[0]);
+  s = (await status()).wolkenalm;
+  check('Dora ist noch dabei, die Runde wartet auf sie', s.phase === 'FIGHT' && s.players.Dora.state === 'ALIVE' &&
+    s.players.Dora.waiting > 0 && s.lebend === 4, JSON.stringify(s.players.Dora));
+  await sleep(4000);
+  dora = await join('Dora');
+  four[3] = dora;
+  check('Dora ist rechtzeitig zurück: „Willkommen zurück!“', await waitFor(() => sawTitle(dora, /Willkommen zurück/) &&
+    sees(dora, /Willkommen zurück! Du bist wieder in der Runde/), 4000), `${dora.titles.join(' | ')} / ${dora.chats.slice(-2).join(' | ')}`);
+  check('Zurück genau dort, wo sie war (Überlebensmodus)', near(dora.entity.position, doraBefore.pos, 1.2) &&
+    dora.game.gameMode === 'survival', `${JSON.stringify(dora.entity.position)} statt ${JSON.stringify(doraBefore.pos)} ${dora.game.gameMode}`);
+  check('Mit denselben Sachen', await waitFor(() => invList(dora) === doraBefore.items, 3000), `${invList(dora)} statt ${doraBefore.items}`);
+  s = (await status()).wolkenalm;
+  check('Gleiches Team, gleiche Insel, noch dabei', s.players.Dora.state === 'ALIVE' && s.players.Dora.team === doraBefore.team &&
+    s.players.Dora.island === doraBefore.island && s.players.Dora.waiting === 0 && s.lebend === 4, JSON.stringify(s.players.Dora));
+  check('Netzwerk: Platz wieder frei (holdSlot 0) und Dora „spielt gerade“', callsOf('hold-slot', 'Dora', mark).some((c) => c.seconds === 0) &&
+    callsOf('playing', 'Dora', mark).some((c) => c.playing === true), JSON.stringify(calls().slice(mark)));
+  check('Die anderen sehen „Dora ist zurück in der Runde“', await waitFor(() => sees(anna, /Dora ist zurück in der Runde/), 3000));
 
   // ------------------------------------------------------------------ Brücke
   const dirX = Math.abs(annaT.x - 1000) >= Math.abs(annaT.z) ? -Math.sign(annaT.x - 1000) : 0;
@@ -460,6 +502,7 @@ async function main() {
   check('Berts Sachen bleiben liegen', Object.values(anna.entities).some((e) => e.name === 'item'),
     Object.values(anna.entities).map((e) => e.name).join(','));
   check('Aktionsleiste „Bert erledigt“ für Anna', await waitFor(() => sawBar(anna, /Bert erledigt/), 2000), anna.bars.slice(-1)[0]);
+  check('Netzwerk: Bert spielt nicht mehr (ausgeschieden)', callsOf('playing', 'Bert').slice(-1)[0]?.playing === false);
 
   // Hinunterstoßen: Carl trifft Dora, Dora stürzt in die Tiefe → Kill für Carl.
   const carlT = team('Carl');
@@ -520,6 +563,8 @@ async function main() {
     sees(bert, /Victory for Anna/), anna.chats.slice(-3).join(' | '));
   const stats = calls().filter((c) => c.t === 'stats');
   const st = (n) => stats.filter((c) => c.name === n).slice(-1)[0];
+  check('Netzwerk: nach dem Sieg spielt niemand mehr (Anna „spielt“ nicht mehr)', await waitFor(() =>
+    callsOf('playing', 'Anna').slice(-1)[0]?.playing === false, 3000));
   check('Netzwerk-Statistik „wolkenkampf“: Anna games 1, wins 1, kills 1, deaths 0, chests 2, best_kills 1',
     st('Anna')?.mode === 'wolkenkampf' && st('Anna').add.games === 1 && st('Anna').add.wins === 1 && st('Anna').add.kills === 1 &&
       st('Anna').add.deaths === 0 && st('Anna').add.chests === 2 && st('Anna').best.best_kills === 1 && st('Anna').lower === false,
@@ -610,7 +655,38 @@ async function main() {
   check('Anna erledigt Bert', killed2);
   check('Dora allein kämpft weiter („Dein Team kämpft weiter“ für Bert)', sawTitle(bert, /Your team fights on/) || sees(bert, /You're spectating/),
     bert.titles.join(' | '));
-  await cmd(inWorld(`tp Dora ${bt2.x + 0.5} 40 ${bt2.z + 0.5}`));
+
+  // Wer mitten im Kampf geht, scheidet sofort aus – wie bisher (sonst rettete ein Verbindungsabbruch aus jedem Kampf).
+  mark = calls().length;
+  await tp(dora, at2.x + 1.5, at2.top + 1, at2.z + 0.5, 90, 0);
+  await tp(carl, at2.x - 0.5, at2.top + 1, at2.z + 0.5, -90, 0);
+  await attackUntil(dora, carl, async () => carl.health < 20, 4);
+  check('Dora trifft Carl', carl.health < 20, `Leben ${carl.health}`);
+  clear(anna);
+  carl.quit();
+  check('Carl geht mitten im Kampf: scheidet sofort aus (kein Platz frei, Kill für Dora)', await waitFor(async () => {
+    const st = (await status()).kristallgipfel;
+    return st.players.Carl.state === 'OUT' && st.players.Dora.kills === 1;
+  }, 4000) && sees(anna, /Carl hat die Runde verlassen/) && callsOf('hold-slot', 'Carl', mark).length === 0,
+  `${anna.chats.slice(-1)[0]} ${JSON.stringify(calls().slice(mark))}`);
+  await sleep(4000);
+  carl = await join('Carl');
+  check('Carl kommt wieder: schaut zu wie bisher', await waitFor(() => carl.game.gameMode === 'spectator' &&
+    Math.abs(carl.entity.position.x - 2000) < 100, 5000), `${carl.game.gameMode} ${JSON.stringify(carl.entity.position)}`);
+
+  // Zu spät: Dora verliert die Verbindung (nicht im Kampf), die Runde wartet – sie kommt aber nicht rechtzeitig.
+  mark = calls().length;
+  clear(anna, bert, carl, emil);
+  dora.quit();
+  check(`Zu spät: Doras Platz bleibt erst ${COMEBACK} s frei (holdSlot ${COMEBACK})`, await waitFor(() =>
+    callsOf('hold-slot', 'Dora', mark).some((c) => c.seconds === COMEBACK), 5000), JSON.stringify(calls().slice(mark)));
+  await sleep(3000);
+  s = (await status()).kristallgipfel;
+  check('Die Runde wartet auf Dora (noch dabei, kein Sieger)', s.phase === 'FIGHT' && s.players.Dora.state === 'ALIVE' &&
+    !sawTitle(anna, /Gewonnen/), JSON.stringify(s.players.Dora));
+  check(`Nach ${COMEBACK} s: Dora ist nicht rechtzeitig zurück und scheidet aus`, await waitFor(() =>
+    sees(anna, /Dora ist nicht rechtzeitig zurückgekommen/), (COMEBACK + 15) * 1000, 500), anna.chats.slice(-2).join(' | '));
+  check('Netzwerk: Angebot „Zurück ins Spiel“ zurückgenommen (holdSlot 0)', callsOf('hold-slot', 'Dora', mark).some((c) => c.seconds === 0));
   check('Team Anna + Carl gewinnt (beide „Gewonnen!“)', await waitFor(() => sawTitle(anna, /Gewonnen/) && sawTitle(carl, /Gewonnen/), 6000),
     anna.titles.slice(-2).join(' | '));
   check('Englisch: „Anna & Carl wins“', await waitFor(() => sawTitle(bert, /Anna & Carl wins/) || sawTitle(dora, /Anna & Carl gewinnt/),
@@ -618,6 +694,9 @@ async function main() {
   const stats2 = calls().filter((c) => c.t === 'stats');
   const carlWins = stats2.filter((c) => c.name === 'Carl' && c.add.wins === 1).length;
   check('Statistik: Carl hat jetzt einen Sieg (zu zweit)', carlWins === 1 && stats2.length === 8, `${stats2.length} Meldungen`);
+  dora = await join('Dora');
+  check('Dora kommt zu spät: wie bisher in den Wolkenhafen', await waitFor(() => inHall(dora), 8000),
+    `${dora.game.gameMode} ${JSON.stringify(dora.entity.position)}`);
   check('Alle zurück im Wolkenhafen (auch Emil)', await waitFor(() => [anna, bert, carl, dora, emil].every(inHall), 15000),
     [anna, bert, carl, dora, emil].map((b) => `${b.username}:${b.game.gameMode}`).join(' '));
   check('Kristallgipfel wird wiederhergestellt', await waitFor(async () => (await status()).info.frei?.includes('kristallgipfel'), 30000, 1000));
@@ -629,7 +708,8 @@ async function main() {
   anna.setQuickBarSlot(8);
   await sleep(200);
   anna.activateItem();
-  check('Bett: zur Lobby (Netzwerk)', await waitFor(() => calls().some((c) => c.t === 'to-lobby' && c.name === 'Anna'), 4000));
+  check('Bett: zur Lobby – fragt das Netzwerk (im Wolkenhafen ohne Nachfrage)', await waitFor(() =>
+    calls().some((c) => c.t === 'ask-lobby' && c.name === 'Anna' && c.asked === false), 4000), JSON.stringify(calls().slice(-2)));
 
   for (const b of [bert, carl, dora, emil]) b.quit();
   await sleep(800);

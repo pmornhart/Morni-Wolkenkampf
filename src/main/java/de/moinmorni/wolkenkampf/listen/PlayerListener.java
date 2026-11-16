@@ -100,8 +100,9 @@ public final class PlayerListener implements Listener {
             case "kit" -> HallMenus.kits(plugin, p);
             case "stats" -> HallMenus.stats(plugin, p);
             case "lobby" -> {
+                // Das Netzwerk fragt nach, falls jemand gerade spielt (im Wolkenhafen geht es sofort).
                 p.sendMessage(Texts.msg(plugin.lang(p), "lobby.going"));
-                plugin.net().toLobby(p, Texts.text(plugin.lang(p), "lobby.kick"));
+                plugin.net().askToLobby(p, Texts.text(plugin.lang(p), "lobby.kick"));
             }
             default -> {
             }

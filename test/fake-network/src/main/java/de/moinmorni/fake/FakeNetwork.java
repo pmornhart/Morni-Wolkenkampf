@@ -12,31 +12,46 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  * Test-Ersatz für das Netzwerk-Plugin: stellt die Schnittstelle {@link MoinMorni} bereit. Sprache und Partys kommen
  * aus {@code plugins/MoinMorni/fake.properties} (bei jedem Aufruf neu gelesen), alle Meldungen (Statistik, Zustand,
- * Lobby) landen als JSON-Zeilen in {@code plugins/MoinMorni/calls.log}.
+ * Lobby, Nachfrage, „spielt gerade“, Platz freihalten) landen als JSON-Zeilen in {@code plugins/MoinMorni/calls.log}.
+ * Wie das echte Netzwerk fragt es bei {@link #askToLobby} nur nach, solange der Modus „spielt gerade“ gemeldet hat
+ * (dann bleibt der Spieler da), und vergisst den Stand, wenn jemand den Server verlässt.
  *
  * <pre>
  * lang.Bert=en
  * party.Anna=Anna,Bert      # Anführerin Anna, Mitglieder Anna und Bert
  * </pre>
  */
-public final class FakeNetwork extends JavaPlugin implements MoinMorni {
+public final class FakeNetwork extends JavaPlugin implements MoinMorni, Listener {
+
+    private final Set<UUID> playing = ConcurrentHashMap.newKeySet();
 
     @Override
     public void onEnable() {
         getDataFolder().mkdirs();
         getServer().getServicesManager().register(MoinMorni.class, this, this, ServicePriority.Normal);
+        getServer().getPluginManager().registerEvents(this, this);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent e) {
+        playing.remove(e.getPlayer().getUniqueId());
     }
 
     private Properties props() {
@@ -149,5 +164,32 @@ public final class FakeNetwork extends JavaPlugin implements MoinMorni {
     public void toLobby(Player player) {
         log("{\"t\":\"to-lobby\",\"name\":\"" + player.getName() + "\"}");
         player.kick(Component.text("Test-Netzwerk: ab in die Lobby"));
+    }
+
+    @Override
+    public void askToLobby(Player player) {
+        boolean asks = playing.contains(player.getUniqueId());
+        log("{\"t\":\"ask-lobby\",\"name\":\"" + player.getName() + "\",\"asked\":" + asks + "}");
+        if (asks) {
+            player.sendMessage(Component.text("Test-Netzwerk: Willst du wirklich zur Lobby? (Nachfrage)"));
+        } else {
+            player.kick(Component.text("Test-Netzwerk: ab in die Lobby"));
+        }
+    }
+
+    @Override
+    public void playing(Player player, boolean on) {
+        if (on) {
+            playing.add(player.getUniqueId());
+        } else {
+            playing.remove(player.getUniqueId());
+        }
+        log("{\"t\":\"playing\",\"name\":\"" + player.getName() + "\",\"playing\":" + on + "}");
+    }
+
+    @Override
+    public void holdSlot(UUID player, int seconds) {
+        log("{\"t\":\"hold-slot\",\"name\":\"" + nameOf(player) + "\",\"uuid\":\"" + player + "\",\"seconds\":"
+                + seconds + "}");
     }
 }

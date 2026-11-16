@@ -37,6 +37,21 @@ public interface Network {
     /** Zurück in die Lobby (ohne Netzwerk: Verbindung trennen mit {@code message}). */
     void toLobby(Player player, Component message);
 
+    /**
+     * Der Spieler will selbst in die Lobby (Knopf, Gegenstand): Spielt er gerade ({@link #playing}), fragt das Netzwerk
+     * erst nach. Ohne Netzwerk wie {@link #toLobby}; ein älteres Netzwerk-Plugin ohne Nachfrage schickt sofort.
+     */
+    void askToLobby(Player player, Component message);
+
+    /** Spielt der Spieler gerade eine Runde? Solange fragt „/lobby“ erst nach. Ohne Netzwerk: nichts. */
+    void playing(Player player, boolean playing);
+
+    /**
+     * Platz nach einem Verbindungsabbruch so viele Sekunden freihalten – so lange bietet die Lobby „Zurück ins Spiel“
+     * an; {@code 0} nimmt das Angebot zurück. Ohne Netzwerk: nichts (man verbindet sich direkt wieder).
+     */
+    void holdSlot(UUID player, int seconds);
+
     /** Party des Spielers (leer ohne Party oder ohne Netzwerk). Kommt auf irgendeinem Thread zurück. */
     CompletableFuture<Optional<Party>> party(UUID player);
 
@@ -54,7 +69,7 @@ public interface Network {
         Logger log = plugin.getLogger();
         if (plugin.getServer().getPluginManager().getPlugin("MoinMorni") != null) {
             try {
-                Network n = Connected.create();
+                Network n = Connected.create(log);
                 if (n != null) {
                     return n;
                 }

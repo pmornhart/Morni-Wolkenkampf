@@ -11,7 +11,11 @@ public record Settings(
         int maxPlayers,
         int gondolaSeconds,
         int afterSeconds,
+        int comebackSeconds,
         Timeline timeline) {
+
+    /** Höchstens so lange wartet eine Runde auf jemanden, der die Verbindung verloren hat. */
+    static final int MAX_COMEBACK_SECONDS = 600;
 
     static Settings load(FileConfiguration c) {
         int refill = clamp(c.getInt("ereignisse.nachschub", 150), 10, 3600);
@@ -25,6 +29,7 @@ public record Settings(
                 clamp(c.getInt("runde.hoechstens-spieler", 12), 2, 12),
                 clamp(c.getInt("runde.gondel-sekunden", 10), 3, 60),
                 clamp(c.getInt("runde.nachspiel-sekunden", 8), 1, 60),
+                clamp(c.getInt("rueckkehr-sekunden", 90), 0, MAX_COMEBACK_SECONDS),
                 new Timeline(refill, storm, fog, fogDuration));
     }
 

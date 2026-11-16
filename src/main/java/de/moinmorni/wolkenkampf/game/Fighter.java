@@ -28,6 +28,7 @@ public final class Fighter {
     private UUID lastAttacker;
     private long lastHitAt;
     private boolean landing;
+    private boolean started;
     /** Höhe des eigenen Gondelbodens: erst Bodenkontakt darunter zählt als Landung. */
     private double landingFloor;
 
@@ -109,6 +110,18 @@ public final class Fighter {
      */
     UUID creditTo(long now) {
         return lastAttacker != null && now - lastHitAt <= CREDIT_TICKS ? lastAttacker : null;
+    }
+
+    /**
+     * Hat die Person den Start mitbekommen (Gondel offen, Überlebensmodus, Start-Ausrüstung)? Wer beim Öffnen gerade die
+     * Verbindung verloren hatte, bekommt ihn beim Wiederkommen.
+     */
+    public boolean started() {
+        return started;
+    }
+
+    void started(boolean s) {
+        started = s;
     }
 
     /** Noch auf dem Weg aus der Gondel nach unten (kein Fallschaden). */

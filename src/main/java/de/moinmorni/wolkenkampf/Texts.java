@@ -172,6 +172,16 @@ public final class Texts {
         t("game.go.sub", "<gray>Plündern, Brücken bauen, kämpfen!</gray>", "<gray>Loot, build bridges, fight!</gray>");
         t("game.started", "<gray>Die Gondel ist offen! Deine Ausrüstung: <au><kit></au>. Die <white>Truhen</white> auf deiner Insel warten.</gray>",
                 "<gray>The gondola is open! Your kit: <au><kit></au>. The <white>chests</white> on your island are waiting.</gray>");
+        // Zurück ins Spiel (Verbindung verloren, Platz bleibt eine Weile frei)
+        t("game.away", "<white><name></white> <gray>hat die Verbindung verloren – der Platz bleibt <white><secs> Sekunden</white> frei.</gray>",
+                "<white><name></white> <gray>lost the connection – the spot stays free for <white><secs> seconds</white>.</gray>");
+        t("game.back", "<gray>Willkommen zurück! Du bist wieder in der Runde – gleiche Insel, gleiche Sachen, gleiches Team.</gray>",
+                "<gray>Welcome back! You're back in the round – same island, same items, same team.</gray>");
+        t("game.back.title", "<em>Willkommen zurück!</em>", "<em>Welcome back!</em>");
+        t("game.back.sub", "<gray>Weiter geht's – genau da, wo du warst.</gray>", "<gray>Carry on – right where you left off.</gray>");
+        t("game.back.all", "<white><name></white> <gray>ist zurück in der Runde.</gray>", "<white><name></white> <gray>is back in the round.</gray>");
+        t("game.back.missed", "<gray>Die Gondel hat sich ohne dich geöffnet – du schwebst jetzt hinunter auf deine Insel.</gray>",
+                "<gray>The gondola opened without you – you're floating down to your island now.</gray>");
         t("kill.bar", "<au>⚔ <name> erledigt</au> <gray>· deine Kills: <white><n></white></gray>",
                 "<au>⚔ <name> defeated</au> <gray>· your kills: <white><n></white></gray>");
 
@@ -220,6 +230,8 @@ public final class Texts {
                 "<white><name></white> <gray>was caught by the gale at the edge. <white><n></white> left.</gray>");
         t("elim.left", "<white><name></white> <gray>hat die Runde verlassen. Noch <white><n></white> dabei.</gray>",
                 "<white><name></white> <gray>left the round. <white><n></white> left.</gray>");
+        t("elim.away", "<white><name></white> <gray>ist nicht rechtzeitig zurückgekommen. Noch <white><n></white> dabei.</gray>",
+                "<white><name></white> <gray>didn't make it back in time. <white><n></white> left.</gray>");
         t("out.title", "<red>Ausgeschieden</red>", "<red>You're out</red>");
         t("out.sub", "<gray>Platz <white><n></white> – du schaust jetzt zu.</gray>", "<gray>Place <white><n></white> – you're spectating now.</gray>");
         t("out.sub.mate", "<gray>Dein Team kämpft weiter – feuere es an!</gray>", "<gray>Your team fights on – cheer them on!</gray>");
