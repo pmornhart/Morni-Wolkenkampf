@@ -12,7 +12,8 @@ public final class Fighter {
     }
 
     /** So lange zählt ein Treffer noch, wenn jemand danach hinunterfällt oder im Nebel scheitert. */
-    static final long CREDIT_MS = 15_000L;
+    /** So lange (in Spielticks, 20 pro Sekunde) zählt ein Treffer noch, wenn jemand danach in die Tiefe fällt. */
+    static final long CREDIT_TICKS = 15L * 20L;
 
     private final UUID uuid;
     private final String name;
@@ -92,14 +93,18 @@ public final class Fighter {
         return chests.add(key);
     }
 
+    /** Treffer merken; {@code now} = aktueller Spieltick. */
     void hitBy(UUID attacker, long now) {
         lastAttacker = attacker;
         lastHitAt = now;
     }
 
-    /** Wer zuletzt (innerhalb von {@link #CREDIT_MS}) getroffen hat – oder null. */
+    /**
+     * Wer zuletzt (innerhalb von {@link #CREDIT_TICKS}) getroffen hat – oder null. Gezählt wird in Spielticks, nicht
+     * nach der Uhr: hängt der Server kurz, verfällt die Gutschrift nicht vorzeitig.
+     */
     UUID creditTo(long now) {
-        return lastAttacker != null && now - lastHitAt <= CREDIT_MS ? lastAttacker : null;
+        return lastAttacker != null && now - lastHitAt <= CREDIT_TICKS ? lastAttacker : null;
     }
 
     /** Noch auf dem Weg aus der Gondel nach unten (kein Fallschaden). */

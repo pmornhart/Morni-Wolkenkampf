@@ -929,7 +929,7 @@ public final class Game {
     public void hitBy(Player victim, Player attacker) {
         Fighter f = fighters.get(victim.getUniqueId());
         if (f != null && attacker != null && !attacker.getUniqueId().equals(victim.getUniqueId())) {
-            f.hitBy(attacker.getUniqueId(), System.currentTimeMillis());
+            f.hitBy(attacker.getUniqueId(), Bukkit.getCurrentTick());
         }
     }
 
@@ -944,7 +944,7 @@ public final class Game {
             return;
         }
         f.state(Fighter.State.OUT);
-        UUID killerId = killer != null ? killer.getUniqueId() : f.creditTo(System.currentTimeMillis());
+        UUID killerId = killer != null ? killer.getUniqueId() : f.creditTo(Bukkit.getCurrentTick());
         Fighter k = killerId == null || sameTeam(killerId, f.uuid()) ? null : fighters.get(killerId);
         if (k != null) {
             k.kill();
