@@ -259,10 +259,10 @@ final class Commands implements TabExecutor {
             }
             case "stopp" -> {
                 if (g != null) {
+                    // Auch wer gerade die Verbindung verloren hat und zurückkommen dürfte, scheidet aus.
                     for (Fighter f : List.copyOf(g.fighters().values())) {
-                        Player p = Bukkit.getPlayer(f.uuid());
-                        if (f.alive() && p != null) {
-                            g.eliminate(p, f, Game.Cause.OTHER, null, false);
+                        if (f.alive()) {
+                            g.eliminate(Bukkit.getPlayer(f.uuid()), f, Game.Cause.OTHER, null, false);
                         }
                     }
                     sender.sendMessage(Component.text("Runde beendet."));

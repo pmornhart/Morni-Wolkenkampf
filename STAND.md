@@ -12,7 +12,8 @@ Netzwerk-Kennung `wolkenkampf`, englisch „Cloud Clash“.
   `Commands`.
 - `logic/` (ohne Server, mit Tests): `Mode`, `Teams` (Partys zusammen), `Spawns` (Startinseln verteilen), `Loot`
   (Truhen-Stufen, gerechte Startinseln), `Timeline` (Nachschub → Gewitter → Nebel, Nebel-Höhe und -Schaden),
-  `StartKit`, `IslandColour`, `MapLayout` (Inseln, Truhen, Gondeln, Nebel, Rand), `Votes`, `Groups`.
+  `StartKit`, `IslandColour`, `MapLayout` (Inseln, Truhen, Gondeln, Nebel, Rand), `Votes`, `Groups`, `Comeback`
+  (Zurück ins Spiel: Regel und Fristen).
 - `data/`: `PlayerData`, `Store`, `Leaderboard`.
 - `world/`: `Plan`, `Decor` (Inseln, Wolken, Bäume, Berge), `Gondola` (Ballon-Gondel), `MapKit`, `MapType`,
   `WolkenalmPlan`, `KristallgipfelPlan`, `HallPlan` (Wolkenhafen), `Construction` (Bau bei neuer `VERSION`,
@@ -25,6 +26,23 @@ Netzwerk-Kennung `wolkenkampf`, englisch „Cloud Clash“.
 
 ## Stand (16.11.2026)
 
+- Version 0.1.1 (Branch `claude/zurueck-ins-spiel`, wartet auf Philips Go): **Zurück ins Spiel** (Philip: „Wenn das
+  Game crasht, soll man zurück zum Spiel können“ und keine Lobby aus Versehen). Netzwerk-Schnittstelle 2 (Kopie
+  byte-gleich): `playing` ab Rundenstart bis Ausscheiden/Rundenende, das Bett im Wolkenhafen ruft `askToLobby`,
+  Verbindungsabbruch mitten in der Runde → Platz `rueckkehr-sekunden` frei (neuer Schlüssel oben in der config.yml,
+  Vorgabe 90, 0 = aus) und `holdSlot(uuid, s)`; rechtzeitig zurück → genau dort, wo man war (Ort, Sachen, Leben,
+  Effekte speichert Minecraft; Insel und Team die Runde), „Willkommen zurück!“, `holdSlot(uuid, 0)`; Gondel inzwischen
+  offen → Start (Ausrüstung, langsam hinunterschweben, Landeschutz) beim Wiederkommen. Zu spät → wie bisher
+  ausgeschieden, Sachen fallen am alten Ort (Abbild beim Gehen), danach Zuschauer. Rundenende/Abbruch →
+  `holdSlot(uuid, 0)` für alle, die noch weg sind. Wer in den letzten 15 s von einem Gegner getroffen wurde, scheidet
+  beim Gehen sofort aus (Kill für den Gegner, wie bisher) – sonst rettete ein Abbruch aus jedem Kampf. Älteres
+  Netzwerk-Plugin (`LinkageError`) → einmal Hinweis im Log, alles wie bisher. Test-Netzwerk schreibt `playing`,
+  `ask-lobby` (fragt nur, solange „spielt“) und `hold-slot` mit. Geprüft: 41 Unit-Tests (neu `ComebackTest`), Paper 26.1
+  übersetzt, echter Test (Paper 26.1.2, `test/run.sh`, `rueckkehr-sekunden: 20`) **118/118**, Log ohne Fehler – neu:
+  alle spielen, Dora geht und kommt rechtzeitig zurück (gleiche Stelle, gleiche Sachen, gleiches Team/Insel,
+  holdSlot 20 → 0, playing), Bert spielt nach dem Ausscheiden nicht mehr, nach dem Sieg spielt niemand mehr; Carl geht
+  mitten im Kampf → sofort aus, Kill für Dora, kommt als Zuschauer zurück; Dora geht in Runde 2 und kommt zu spät →
+  scheidet nach 20 s aus, Sieg für Anna & Carl, holdSlot 0, danach im Wolkenhafen; Bett → `askToLobby`.
 - Version 0.1.0 (erster Stand, Branch `claude/erster-stand`, noch nicht veröffentlicht): alles aus dem README.
 - 37 Unit-Tests grün (Teams/Partys, Startinseln, Abstimmung, Truhen über 2000 Startwerte gerecht, Mitte besser,
   Ablauf/Nebel, Ausrüstungen, Kartenaufbau beider Karten inkl. Abstände und Truhen, Blocknamen, Bestenliste, Texte inkl.
@@ -62,6 +80,7 @@ Netzwerk-Kennung `wolkenkampf`, englisch „Cloud Clash“.
 
 ## Offen
 
-- Philip: Bilder ansehen; Go für `main` (dann erstes Release v0.1.0).
-- Netzwerk-Repo: `MODE_REPOS` (Repo `morni-wolkenkampf`), Lobby-Figur, Webseite (Modus-Seite, Bestenliste nach
-  `wins`), Einstellungs-Katalog für die `config.yml`.
+- Philip: Go für `main` mit 0.1.1 (Zurück ins Spiel).
+- Netzwerk-Repo: Einstellungs-Katalog um `rueckkehr-sekunden` ergänzen (0–600, Vorgabe 90); Nachfrage vor der Lobby
+  und „Zurück ins Spiel“ in der Lobby baut das Netzwerk-Plugin (Schnittstelle 2).
+- Nicht echt geprüft: Rückkehr mit echtem Client über das echte Netzwerk (Lobby-Angebot), Bedrock.

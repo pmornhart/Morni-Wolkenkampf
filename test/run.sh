@@ -76,8 +76,10 @@ EOF
 # Testwerte: kurzer Countdown, Ereignisse weit weg (der Test spult vor). Die Gondel wartet lange – der Test öffnet sie
 # selbst, sobald er sie geprüft hat (/wolkenkampf vorspulen countdown|oeffnen); mit einer kurzen festen Zeit liefen die
 # Prüfungen auf einem ausgelasteten Rechner (RCON-Antworten kommen dann Sekunden später) schon nach dem Öffnen.
+# Zurück ins Spiel: 20 Sekunden (der Test kommt einmal rechtzeitig und einmal zu spät zurück).
 cat > "$SERVER/plugins/MorniWolkenkampf/config.yml" <<'EOF'
 welt: wolkenkampf
+rueckkehr-sekunden: 20
 wolkenhafen:
   countdown-sekunden: 8
   mindestens-spieler: 3

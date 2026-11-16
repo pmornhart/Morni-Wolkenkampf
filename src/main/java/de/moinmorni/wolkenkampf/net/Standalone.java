@@ -46,6 +46,21 @@ final class Standalone implements Network {
     }
 
     @Override
+    public void askToLobby(Player player, Component message) {
+        player.kick(message);
+    }
+
+    @Override
+    public void playing(Player player, boolean playing) {
+        // niemand fragt nach
+    }
+
+    @Override
+    public void holdSlot(UUID player, int seconds) {
+        // ohne Netzwerk verbindet man sich direkt wieder mit diesem Server
+    }
+
+    @Override
     public CompletableFuture<Optional<Party>> party(UUID player) {
         return CompletableFuture.completedFuture(Optional.empty());
     }
