@@ -11,8 +11,10 @@ public final class Fighter {
         ALIVE, OUT
     }
 
-    /** So lange zählt ein Treffer noch, wenn jemand danach hinunterfällt oder im Nebel scheitert. */
-    /** So lange (in Spielticks, 20 pro Sekunde) zählt ein Treffer noch, wenn jemand danach in die Tiefe fällt. */
+    /**
+     * So lange (in Spielticks, 20 pro Sekunde) zählt ein Treffer noch, wenn jemand danach in die Tiefe fällt oder im
+     * Nebel scheitert.
+     */
     static final long CREDIT_TICKS = 15L * 20L;
 
     private final UUID uuid;
@@ -26,6 +28,8 @@ public final class Fighter {
     private UUID lastAttacker;
     private long lastHitAt;
     private boolean landing;
+    /** Seit dem Öffnen der Gondel einmal in der Luft gewesen (erst dann zählt Bodenkontakt als Landung). */
+    private boolean airborne;
 
     Fighter(UUID uuid, String name, int team) {
         this.uuid = uuid;
@@ -114,5 +118,23 @@ public final class Fighter {
 
     void landing(boolean l) {
         landing = l;
+        airborne = false;
+    }
+
+    /**
+     * Landeschutz nachführen, jeden Tick mit dem Bodenkontakt, den der Client meldet. Gelandet ist erst, wer nach dem
+     * Öffnen einmal in der Luft war und dann wieder Boden unter den Füßen hat. Direkt nach dem Öffnen meldet der Client
+     * noch „am Boden“ – er stand ja auf dem Gondelboden, und sein nächstes Bewegungspaket kommt erst danach an. Würde
+     * das schon zählen, wäre der Schutz weg, bevor der Sturz überhaupt beginnt.
+     */
+    void landingTick(boolean onGround) {
+        if (!landing) {
+            return;
+        }
+        if (!onGround) {
+            airborne = true;
+        } else if (airborne) {
+            landing = false;
+        }
     }
 }

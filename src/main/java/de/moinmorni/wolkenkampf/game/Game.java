@@ -558,9 +558,7 @@ public final class Game {
                 eliminate(p, f, Cause.VOID, null, false);
                 continue;
             }
-            if (f.landing() && p.isOnGround() && ticks % 2 == 0) {
-                f.landing(false);
-            }
+            f.landingTick(p.isOnGround());
         }
         if (phase != Phase.FIGHT) {
             return;
