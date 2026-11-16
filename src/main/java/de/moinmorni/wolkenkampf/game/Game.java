@@ -80,6 +80,8 @@ public final class Game {
     private static final double BORDER_DAMAGE = 2;
     private static final int SLOW_FALL_TICKS = 70;
     private static final double SPECTATOR_RANGE = 40;
+    /** Höhen der Nebelflächen unter der Nebelgrenze. */
+    private static final double[] FOG_LAYERS = {0.0, -1.6};
     private static final Map<IslandColour, List<Object[]>> GONDOLA_BLOCKS = new EnumMap<>(IslandColour.class);
 
     /** Ein Team: seine Insel und seine Leute. */
@@ -113,6 +115,7 @@ public final class Game {
     private final Set<UUID> spectators = new LinkedHashSet<>();
     private final List<ChestSpot> chests = new ArrayList<>();
     private final List<Strike> strikes = new ArrayList<>();
+    private final List<org.bukkit.entity.BlockDisplay> fog = new ArrayList<>();
     private final LangBar bar = new LangBar(BossBar.Color.BLUE, BossBar.Overlay.PROGRESS);
     private Phase phase = Phase.GONDOLA;
     private int phaseTicks;
@@ -370,7 +373,6 @@ public final class Game {
         bar.show(p, lang);
         if (timeline.storming(seconds) && phase == Phase.FIGHT) {
             p.setPlayerWeather(WeatherType.DOWNFALL);
-            p.setPlayerTime(13000L, false);
         }
     }
 
@@ -572,7 +574,7 @@ public final class Game {
                 world.spawnParticle(Particle.CLOUD, s.at.clone().add(0, 2.5, 0), 4, 0.5, 0.2, 0.5, 0.01);
             }
         }
-        if (ticks % 10 == 0 && timeline.foggy(seconds)) {
+        if (ticks % 5 == 0 && timeline.foggy(seconds)) {
             fogParticles();
         }
         if (ticks % SECOND == 0) {
@@ -596,6 +598,7 @@ public final class Game {
             stormBegins();
         } else if (now == Timeline.Event.FOG) {
             titleAll("event.fog.title", "event.fog.sub", 2500);
+            fogPlanes();
             broadcast(lang -> Texts.msg(lang, "event.fog.now"));
             soundAll("minecraft:ambient.basalt_deltas.mood", 0.7f);
         }
@@ -607,6 +610,7 @@ public final class Game {
             }
         }
         fogLevel = timeline.fogLevel(seconds, MapType.FLOOR_Y + layout.fogBottom(), MapType.FLOOR_Y + layout.fogTop());
+        moveFog();
         double fogDamage = timeline.fogDamage(seconds);
         for (Fighter f : new ArrayList<>(fighters.values())) {
             Player p = Bukkit.getPlayer(f.uuid());
@@ -735,7 +739,6 @@ public final class Game {
     private void stormBegins() {
         for (Player p : audience()) {
             p.setPlayerWeather(WeatherType.DOWNFALL);
-            p.setPlayerTime(13000L, false);
         }
         titleAll("event.storm.title", "event.storm.sub", 2500);
         broadcast(lang -> Texts.msg(lang, "event.storm.now"));
@@ -798,6 +801,43 @@ public final class Game {
                     p.setVelocity(p.getLocation().toVector().subtract(at.toVector()).setY(0).normalize().multiply(0.6).setY(0.4));
                     p.sendMessage(Texts.msg(plugin.lang(p), "event.storm.hit"));
                 }
+            }
+        }
+    }
+
+    /**
+     * Nebel sichtbar machen: zwei riesige, durchscheinende weiße Flächen (Block-Anzeigen aus Glas) über der ganzen Karte,
+     * die gleitend mit der Nebelgrenze steigen. Bedrock zeigt Block-Anzeigen nicht – dort bleiben die Schwaden.
+     */
+    private void fogPlanes() {
+        float size = layout.border() * 2f + 60f;
+        String[] glass = {"white_stained_glass", "light_gray_stained_glass"};
+        for (int i = 0; i < FOG_LAYERS.length; i++) {
+            String block = glass[i % glass.length];
+            Location at = loc(0, 0, 0);
+            at.setY(fogLevel + FOG_LAYERS[i]);
+            fog.add(world.spawn(at, org.bukkit.entity.BlockDisplay.class, d -> {
+                d.setBlock(Plan.data(block));
+                d.setPersistent(false);
+                d.setViewRange(8f);
+                d.setBrightness(new org.bukkit.entity.Display.Brightness(15, 15));
+                d.setTeleportDuration(SECOND);
+                d.setTransformation(new org.bukkit.util.Transformation(new org.joml.Vector3f(-size / 2, 0, -size / 2),
+                        new org.joml.AxisAngle4f(), new org.joml.Vector3f(size, 0.08f, size), new org.joml.AxisAngle4f()));
+            }));
+        }
+    }
+
+    private void moveFog() {
+        if (fog.isEmpty() && timeline.foggy(seconds)) {
+            fogPlanes();
+        }
+        for (int i = 0; i < fog.size(); i++) {
+            org.bukkit.entity.BlockDisplay d = fog.get(i);
+            if (d.isValid()) {
+                Location at = d.getLocation();
+                at.setY(fogLevel + FOG_LAYERS[i]);
+                d.teleport(at);
             }
         }
     }
@@ -1063,6 +1103,8 @@ public final class Game {
         }
         spectators.clear();
         strikes.clear();
+        fog.forEach(org.bukkit.entity.Entity::remove);
+        fog.clear();
         if (plugin.isEnabled()) {
             plugin.construction().restore(map, () -> plugin.boards().refreshHall());
         }

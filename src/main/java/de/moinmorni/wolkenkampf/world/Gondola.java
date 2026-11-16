@@ -71,8 +71,9 @@ public final class Gondola {
             }
         }
         // Laternen an zwei Ecken, Brenner unter der Hülle (Lagerfeuer raucht in den Ballon).
-        p.set(-HALF, 2, 0, "lantern[hanging=false]");
-        p.set(HALF, 2, 0, "lantern[hanging=false]");
+        // Laternen an zwei Ecken (nicht in der Mitte des Randes – dort schaut man hinaus).
+        p.set(-HALF, 2, -HALF, "lantern[hanging=false]");
+        p.set(HALF, 2, HALF, "lantern[hanging=false]");
         p.set(0, ENVELOPE - 1, 0, "campfire[lit=true,signal_fire=false,facing=north]");
         p.set(0, ENVELOPE, 0, "iron_chain[axis=y]");
         p.set(0, ENVELOPE + 1, 0, "iron_chain[axis=y]");

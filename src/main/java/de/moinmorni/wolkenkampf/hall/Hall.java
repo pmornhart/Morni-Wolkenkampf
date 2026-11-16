@@ -119,7 +119,9 @@ public final class Hall {
         p.setFallDistance(0);
         p.setExp(0);
         p.setLevel(0);
-        p.resetPlayerWeather();
+        // Nicht resetPlayerWeather: dann bliebe der Regen aus dem Gewitter beim Spieler stehen (Regenstärke wird nur
+        // bei gesetztem Wetter zurückgefahren). Die Welt hat ohnehin immer klares Wetter.
+        p.setPlayerWeather(org.bukkit.WeatherType.CLEAR);
         p.resetPlayerTime();
         items(p, lang);
         waiting.add(p.getUniqueId());

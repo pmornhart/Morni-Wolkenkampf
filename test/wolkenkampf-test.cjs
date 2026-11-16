@@ -457,7 +457,7 @@ async function main() {
     st('Bert').add.deaths === 1 && st('Bert').add.wins === 0 && st('Carl').add.kills === 1, stats.map((c) => c.name).join(','));
   check('Zurück in den Wolkenhafen (alle, auch die Zuschauer)', await waitFor(() => [anna, bert, carl, dora].every(inHall), 15000),
     [anna, bert, carl, dora].map((b) => `${b.username}:${b.game.gameMode}`).join(' '));
-  check('Wolkenhafen-Knöpfe wieder da, kein Regen', await waitFor(() => slot(anna, 0)?.name === 'compass' && !anna.isRaining, 4000),
+  check('Wolkenhafen-Knöpfe wieder da, kein Regen', await waitFor(() => slot(anna, 0)?.name === 'compass' && !anna.isRaining, 9000),
     `${slot(anna, 0)?.name} Regen: ${anna.isRaining} (${anna.rainState})`);
   check('Karte wird wiederhergestellt', await waitFor(async () => (await status()).info.frei?.includes('wolkenalm'), 30000, 1000),
     (await status()).info.frei);
