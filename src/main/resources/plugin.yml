@@ -1,0 +1,53 @@
+name: MorniWolkenkampf
+version: '${project.version}'
+main: de.moinmorni.wolkenkampf.WolkenkampfPlugin
+api-version: '1.21'
+description: Wolkenkampf für das MoinMorni-Netzwerk – Kampf auf schwebenden Inseln, 2 bis 12 Leute, allein oder zu zweit.
+authors: [MoinMorni]
+website: https://moinmorni.net
+# Läuft mit dem Netzwerk-Plugin (Sprache, Party, Statistik) und auch allein.
+softdepend: [MoinMorni]
+
+commands:
+  wolkenkampf:
+    description: Verwaltung (info, status, start, vorspulen, stopp, neubauen, neuladen)
+    usage: /wolkenkampf <info|status|start [karte] [allein|zweier]|vorspulen <nachschub|gewitter|nebel|ende|sekunden> [karte]|stopp [karte]|neubauen|neuladen>
+    aliases: [wkadmin]
+    permission: moinmorni.wolkenkampf.admin
+  karte:
+    description: Über die Karte abstimmen
+    usage: /karte [wolkenalm|kristallgipfel]
+    aliases: [map, vote]
+  spielart:
+    description: Über die Spielart abstimmen (allein oder Zweier-Teams)
+    usage: /spielart [allein|zweier]
+    aliases: [mode, modus]
+  ausruestung:
+    description: Start-Ausrüstung wählen (kostenlos)
+    usage: /ausruestung [name]
+    aliases: [kit, kits]
+  bereit:
+    description: Im Wolkenhafen bereit melden
+    usage: /bereit
+    aliases: [ready]
+  zuschauen:
+    description: Einer Runde zuschauen
+    usage: /zuschauen [spieler|karte]
+    aliases: [spectate, spec]
+  verlassen:
+    description: Runde oder Zuschauen verlassen (zurück in den Wolkenhafen)
+    usage: /verlassen
+    aliases: [leave]
+  stats:
+    description: Statistik ansehen
+    usage: /stats [spieler]
+    aliases: [statistik]
+  top:
+    description: Die besten Wolkenkämpfer
+    usage: /top
+    aliases: [bestenliste, leaderboard]
+
+permissions:
+  moinmorni.wolkenkampf.admin:
+    description: Wolkenkampf verwalten und im Kreativmodus in der Wolkenkampf-Welt bauen
+    default: op

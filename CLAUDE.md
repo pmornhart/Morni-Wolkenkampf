@@ -6,7 +6,7 @@
 
 - Repo ist **öffentlich**: keine Geheimnisse, Tokens oder privaten Daten committen (Geheimes nur in `.env`, nie im Repo).
   Auch keine Test-Server-Ordner, Welten, Spielerdaten oder RCON-Passwörter.
-- Der Modus heißt **Wolkenkampf** (englisch „Cloud Clash“), das Repo `pmornhart/Morni-Wolkenkampf`, die Jar
+- Der Modus heißt **Wolkenkampf** (englisch „Cloud Clash“), das Repo `pmornhart/morni-wolkenkampf`, die Jar
   `Morni-Wolkenkampf.jar`, das Plugin `MorniWolkenkampf`, Kennung im Netzwerk `wolkenkampf`.
 - Texte im Spiel auf Deutsch (Standard) und Englisch, freundlich, keine Fachbegriffe ohne Erklärung. Alle Texte stehen
   in `Texts.java` (MiniMessage, beide Sprachen; `TextsTest` prüft Platzhalter, Zeichen, dass jeder im Code benutzte
@@ -23,12 +23,12 @@
 - Wolkenkampf muss auch ohne Netzwerk laufen (`softdepend: [MoinMorni]`; Sprache dann aus dem Client).
 - Paper 26.x, Java 25. Der Code muss auch gegen Paper 26.1 übersetzen (`mvn -Ppaper-26.1 compile`, läuft in der CI).
   Blocknamen von 26.x (z. B. `iron_chain`, nicht `chain`) – beim Start werden alle Pläne gebaut, ein falscher Name fällt
-  sofort auf (und `PlanTest` prüft die Blocknamen ohne Server).
+  sofort auf (`MapLayoutTest` prüft ohne Server, dass es Baublöcke, Truhen-Dinge, Wolle und Banner gibt).
 - Regeln ohne Server (Truhen-Inhalt, Teams, Abstimmung, Ablauf der Ereignisse, Nebel, Startplätze, Ausrüstungen,
   Bestenliste, Karten-Aufbau) gehören in `logic/` bzw. `data/` – ohne Bukkit, mit Tests. Werte dort nur zusammen mit den
   Tests ändern.
 - Ändern sich Wolkenhafen oder Karten: `Construction.VERSION` erhöhen – dann baut der Server beim nächsten Start neu.
-  Nach jeder Runde stellt `Restorer` die Karte Block für Block nach dem Bauplan wieder her.
+  Nach jeder Runde stellt `Construction.restore` die Karte Block für Block nach dem Bauplan wieder her.
 - Neue Version: `<version>` in `pom.xml` erhöhen und `docs/releases/v<version>.md` anlegen; ein Push auf `main` baut das
   Release mit `Morni-Wolkenkampf.jar` – das Netzwerk holt es sich von dort.
 - Vor jeder Veröffentlichung (Merge nach `main`) Philips Go abwarten.
