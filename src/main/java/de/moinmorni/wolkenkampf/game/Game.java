@@ -798,7 +798,11 @@ public final class Game {
             if (p.getLocation().distance(at) <= STRIKE_RADIUS) {
                 hurt(p, f, STRIKE_DAMAGE, Cause.STORM);
                 if (f.alive()) {
-                    p.setVelocity(p.getLocation().toVector().subtract(at.toVector()).setY(0).normalize().multiply(0.6).setY(0.4));
+                    org.bukkit.util.Vector away = p.getLocation().toVector().subtract(at.toVector()).setY(0);
+                    if (away.lengthSquared() < 1e-4) {
+                        away = new org.bukkit.util.Vector(random.nextDouble() - 0.5, 0, random.nextDouble() - 0.5);
+                    }
+                    p.setVelocity(away.normalize().multiply(0.6).setY(0.4));
                     p.sendMessage(Texts.msg(plugin.lang(p), "event.storm.hit"));
                 }
             }
@@ -844,12 +848,12 @@ public final class Game {
 
     /** Nebel sichtbar machen: eine Schicht grauer Schwaden rund um jeden, der zuschaut oder kämpft. */
     private void fogParticles() {
-        Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(215, 222, 228), 3.2f);
+        Particle.DustOptions dust = new Particle.DustOptions(Color.fromRGB(215, 222, 228), 1.8f);
         for (Player p : audience()) {
             Location c = p.getLocation();
             for (int i = 0; i < 70; i++) {
                 double a = random.nextDouble() * Math.PI * 2;
-                double d = 2 + random.nextDouble() * 16;
+                double d = 5 + random.nextDouble() * 15;
                 p.spawnParticle(Particle.DUST, c.getX() + Math.cos(a) * d, fogLevel + random.nextDouble() * 0.6 - 0.3,
                         c.getZ() + Math.sin(a) * d, 1, 0, 0, 0, 0, dust);
             }

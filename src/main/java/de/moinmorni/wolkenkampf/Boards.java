@@ -120,9 +120,9 @@ public final class Boards {
             hallHolos.add(Holo.spawn(plugin, at(t[0] + 0.5, 3.6, t[1] + 0.5), lang -> table(lang, m), 1f));
         }
         hallHolos.add(Holo.spawn(plugin, at(HallPlan.BOARD[0] + 0.5, 2.8, HallPlan.BOARD[1] + 0.25), this::top, 0.9f));
-        hallHolos.add(Holo.spawn(plugin, at(HallPlan.KITS[0] - 1 + 0.5, 5.6, HallPlan.KITS[1] + 0.5),
-                lang -> Texts.text(lang, "board.kits"), 1f));
-        hallHolos.add(Holo.spawn(plugin, at(HallPlan.MODES[0] + 0.5, 4.6, HallPlan.MODES[1] + 0.5), this::modes, 1f));
+        hallHolos.add(Holo.spawn(plugin, at(HallPlan.KITS[0] + 1.6, 2.4, HallPlan.KITS[1] + 0.5),
+                lang -> Texts.text(lang, "board.kits"), 0.9f));
+        hallHolos.add(Holo.spawn(plugin, at(HallPlan.MODES[0] - 0.6, 3.0, HallPlan.MODES[1] + 0.5), this::modes, 0.9f));
         hallHolos.add(Holo.spawn(plugin, at(0.5, 4.2, 6.5), lang -> Texts.text(lang, "board.welcome"), 1.1f));
     }
 

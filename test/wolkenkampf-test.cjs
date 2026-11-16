@@ -313,8 +313,10 @@ async function main() {
   check('Netzwerk: Zustand „running“', calls().some((c) => c.t === 'state' && c.state === 'running'));
 
   // ------------------------------------------------------------------ Truhen
-  const chests = anna.findBlocks({ matching: (b) => b.name === 'chest', maxDistance: 7, count: 4 })
+  const islandChests = () => anna.findBlocks({ matching: (b) => b.name === 'chest', maxDistance: 12, count: 8 })
     .filter((p) => Math.hypot(p.x + 0.5 - (annaT.x + 0.5), p.z + 0.5 - (annaT.z + 0.5)) < 6);
+  await waitFor(() => islandChests().length >= 2, 6000, 500);
+  const chests = islandChests();
   check('Zwei Truhen auf der Startinsel', chests.length === 2, JSON.stringify(chests));
   const contents = [];
   await tp(anna, annaT.x + 0.5, annaT.top + 1, annaT.z + 0.5);

@@ -43,7 +43,7 @@ final class KristallgipfelPlan {
         return p;
     }
 
-    /** Oberfläche auflockern: etwas Kalzit, Packeis und Schneeschichten (nicht auf Landeplatz und Truhen). */
+    /** Oberfläche auflockern: etwas Kalzit und Packeis im Schnee. */
     private static void surface(Plan p, MapLayout.Island is, Random r) {
         for (int dx = -is.radius() - 1; dx <= is.radius() + 1; dx++) {
             for (int dz = -is.radius() - 1; dz <= is.radius() + 1; dz++) {
@@ -58,8 +58,6 @@ final class KristallgipfelPlan {
                     p.set(x, is.top(), z, "calcite");
                 } else if (roll < 16) {
                     p.set(x, is.top(), z, "packed_ice");
-                } else if (roll < 20 && !MapKit.reserved(is, x, z)) {
-                    p.set(x, is.top() + 1, z, "snow[layers=1]");
                 }
             }
         }
