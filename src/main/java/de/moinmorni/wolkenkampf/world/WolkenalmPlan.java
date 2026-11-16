@@ -187,8 +187,10 @@ final class WolkenalmPlan {
                     + ",half=bottom,shape=straight]");
         }
         p.set(0, t + 2, z1 + 1, "white_candle[candles=3,lit=true]");
-        p.set(0, t + 3, z1, "stripped_dark_oak_log[axis=y]");
-        p.set(0, t + 4, z1, "stripped_dark_oak_log[axis=y]");
+        // Kreuz an der Stirnwand: Längsbalken über die Querbalken hinaus.
+        for (int y = t + 2; y <= t + 5; y++) {
+            p.set(0, y, z1, "stripped_dark_oak_log[axis=y]");
+        }
         p.set(-1, t + 4, z1, "stripped_dark_oak_log[axis=x]");
         p.set(1, t + 4, z1, "stripped_dark_oak_log[axis=x]");
         Decor.hangingLantern(p, 0, t + 8, -1, 1, "lantern");
